@@ -20,8 +20,11 @@ class SdkErr extends Error {
 }
 
 interface ExecScript {
-  /** "hang": never resolves. "untilKill": resolves with exited 137 once kill() is called. */
-  events: (SdkExecEvent | SdkErr | "hang" | "untilKill" | undefined)[];
+  /**
+   * "hang": never resolves. "untilKill": resolves with exited 137 once kill() is called.
+   * "endOnKill": the stream ends (null) once kill() is called, without an exit event.
+   */
+  events: (SdkExecEvent | SdkErr | "hang" | "untilKill" | "endOnKill" | undefined)[];
 }
 
 function info(over: Partial<SdkJobInfo> = {}): SdkJobInfo {
@@ -84,6 +87,9 @@ class FakeSandbox implements SdkSandbox {
         if (e === "hang") return new Promise<never>(() => {});
         if (e === "untilKill") {
           return new Promise<SdkExecEvent>((res) => { onKill = () => res({ kind: "exited", code: 137 }); });
+        }
+        if (e === "endOnKill") {
+          return new Promise<null>((res) => { onKill = () => res(null); }) as Promise<never>;
         }
         if (e instanceof SdkErr) throw e;
         return e as SdkExecEvent | undefined;
@@ -492,6 +498,14 @@ describe("MicrosandboxBackend.run own deadline kill", () => {
     sb.script.events = [{ kind: "stdout", data: enc("part") }, "untilKill"];
     const r = await be.run("x", { timeoutMs: 10 });
     expect(r).toEqual({ output: "part", exitCode: null, timedOut: true, droppedChars: 0 });
+    expect(sb.killedExec).toBe(1);
+  });
+
+  it("keeps the output when the stream ends after our own kill without an exit event", async () => {
+    const { be, sb } = setup({ graceMs: 1000, killDelayMs: 10 });
+    sb.script.events = [{ kind: "stdout", data: enc("part") }, "endOnKill"];
+    const r = await be.run("x", { timeoutMs: 10 });
+    expect(r).toEqual({ output: "part", exitCode: null, timedOut: true, droppedChars: 0, exitUnconfirmed: true });
     expect(sb.killedExec).toBe(1);
   });
 

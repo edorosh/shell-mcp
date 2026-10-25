@@ -254,9 +254,10 @@ export class MicrosandboxBackend implements Backend {
       const killedByDeadline = deadlinePassed && (exitCode === -1 || (weKilled && exitCode !== 0));
       return killedByDeadline ? result(null, true) : result(exitCode, false);
     }
-    // We killed at the deadline and no exit came within the grace: still a timeout (S5), with
-    // the output captured so far, flagged so the agent knows the exit was not confirmed.
-    if (stopped === "deadline") return { ...result(null, true), exitUnconfirmed: true };
+    // We killed at the deadline and no exit came within the grace, or the stream ended after
+    // our kill without an exit event: still a timeout (S5), with the output captured so far,
+    // flagged so the agent knows the exit was not confirmed.
+    if (stopped === "deadline" || weKilled) return { ...result(null, true), exitUnconfirmed: true };
     if (deadlinePassed) {
       throw new BackendError("outcome_unknown", `the ${timeoutMs} ms deadline passed but the process exit was not confirmed`);
     }
