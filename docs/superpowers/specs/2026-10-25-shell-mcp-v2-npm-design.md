@@ -8,6 +8,18 @@ published, launched and checked so that a Windows user can go from nothing to
 a working client config without cloning or building the repo. Requirement IDs
 (C9, I2, ...) refer to the product spec.
 
+## 0. Goal and success criteria
+
+- **For:** a Windows developer who uses Claude Code or VS Code Copilot and
+  already has (or will create) a microsandbox sandbox. They should not need
+  git, a clone or a TypeScript build.
+- **Done when:** on a Windows account with no clone of the repo, following
+  the README from Install to Verify with the published package gives a
+  passing `--check`, and in one Claude Code and one Copilot session `uname -a`
+  through the agent reports Linux with the built-in shell turned off
+  (plan Task 10).
+- **Not a goal:** any change to how the server behaves once it is running.
+
 ## 1. Decisions
 
 | Area | Decision | Who decided |
@@ -16,7 +28,7 @@ a working client config without cloning or building the repo. Requirement IDs
 | Bin name | `shell-mcp` (unchanged), pointing at `dist/index.js` | Claude's call |
 | First version | `1.0.0`. The tool interface and flags shipped in v1 are what users depend on; semver from here. The milestone name (v2) and the package version are unrelated | Claude's call |
 | Launch form | `npx -y @edorosh/shell-mcp@<exact version> ...` in every example. Global install (`npm i -g`) is the documented alternative | User (roadmap), version pin is Claude's call |
-| Version pinning in client configs | Examples pin an exact version, never `@latest` or a range. The SDK and the `msb` runtime must match (v1 design §2 risk 2), so an unattended upgrade can break a working setup. A pinned spec is also served from the npx cache without a registry round trip, which keeps client startup fast and works offline | Claude's call |
+| Version pinning in client configs | Examples pin an exact version, never `@latest` or a range. The SDK and the `msb` runtime must match (v1 design §2 risk 2), so an unattended upgrade can break a working setup. Pinning does not avoid the registry: npx revalidates the package manifest online on every launch (`libnpmexec` calls `pacote.manifest` with `preferOnline: true`, checked in npm 10.9), so each client start makes one registry request even with a warm cache. Offline start is measured in risk 3; global install is the documented answer for offline or slow-registry setups | Claude's call (rationale corrected in the 2026-10-25 review) |
 | `microsandbox` SDK | Stays an exact pin (no `^`). A new SDK version is a new shell-mcp release, with the matching `msb` version in the changelog | Roadmap |
 | Runtime check | At startup, resolve the `msb` runtime the SDK will use (`resolveRuntime()`) and read its version (`resolveRuntimeVersion()`), log both to stderr, and warn on a mismatch with the SDK version. Never exit on a mismatch (C7) | Claude's call |
 | New CLI modes | `--version`, `--help`, and `--check` (validate config, runtime and sandbox, then exit). See §4 | Claude's call |
@@ -55,7 +67,8 @@ Checked against the npm registry on 2026-10-25 for `microsandbox@0.7.11`.
 5. **First launch downloads about 45 MB.** On a cold npx cache, the first
    client start fetches the platform package. That can exceed a client's
    server-startup timeout (Claude Code's `MCP_TIMEOUT`). The README tells the
-   user to warm the cache once from a terminal (§5).
+   user to warm the cache once from a terminal (§5). A warm cache still
+   costs one registry request per start (§1, version pinning).
 
 ## 3. Risks to retire first (Task 2, on the user's Windows host)
 
@@ -75,9 +88,11 @@ Checked against the npm registry on 2026-10-25 for `microsandbox@0.7.11`.
    - Global install: `"command": "shell-mcp"` and `cmd /c shell-mcp`. npm
      creates `shell-mcp.cmd` and `shell-mcp.ps1` shims, and a launcher that
      spawns without a shell may not resolve `.cmd`.
-3. **Cold-start timeout.** With an empty npx cache, does the first client
-   start succeed or time out? This decides how strongly the README insists on
-   the warm-up step.
+3. **Cold-start timeout and offline start.** With an empty npx cache, does
+   the first client start succeed or time out? This decides how strongly the
+   README insists on the warm-up step. With a warm cache, how long does a
+   start take, and does it still start with the network off? If it does not,
+   the README says so and points offline users at global install.
 4. **`${workspaceFolder}` in `.vscode/mcp.json` args.** If VS Code substitutes
    it in `args`, the Copilot example uses `--host-root ${workspaceFolder}` and
    becomes copy-paste portable. Claude Code expands `${VAR}` from the
@@ -99,27 +114,41 @@ The MCP mode (no mode flag) is unchanged. Three new flags, parsed in
 | `--help` | Print usage: the flag table from the README, the env fallbacks, and a link to the README. stdout | 0 |
 | `--check` | Requires the normal config. Runs the checks below and prints one line per check to stdout, `ok` or `FAIL` plus a hint | 0 if all pass, 1 otherwise |
 
-`--version` and `--help` need no other flags and win over a config error.
-They write to stdout because no MCP session exists. C9 gets a matching
+`--version` and `--help` need no other flags and win over anything else on
+the command line: a missing or invalid setting, an unknown flag, and each
+other. Precedence is `--help`, then `--version`, then `--check`, then MCP
+mode. They write to stdout because no MCP session exists. C9 gets a matching
 carve-out (Task 6): stdout carries only MCP messages *while serving MCP*.
 
-`--check` steps, in order, stopping at the first failure that makes the rest
-meaningless:
+`--check` steps, in order. A step that cannot run because an earlier one
+failed prints `skipped`:
 
-1. **Config** valid (same validation as MCP mode, C6).
+1. **Config** valid (same validation as MCP mode, C6). On failure, print the
+   `ConfigError` message and stop; nothing else runs.
 2. **Native module** loads (`import("microsandbox")`). Failure hint: reinstall
-   without `--omit=optional`, on the same OS and CPU.
+   without `--omit=optional`, on the same OS and CPU. On failure steps 3 to 6
+   are skipped.
 3. **Runtime** resolves: print `origin`, `msbPath` and version. A version
    different from the SDK's is a `FAIL` with the hint "install msb
    <sdk version> or remove the home install so the packaged runtime is used".
-   (In MCP mode the same condition is only a stderr warning.)
-4. **Sandbox** reachable and running, using the backend's existing connect
-   path and error wording (E3, hint `msb start <name>`).
-5. **Shell** runs: `uname -s` through `Backend.run` returns `Linux`, exit 0.
-6. **Mount** matches: list the guest root (`ls -A1` through `Backend.run`) and
-   the host root (`fs.readdir`), and pass if the two name sets are equal. An
-   empty host root passes with a note, since it proves nothing. Read-only; no
-   files are written on either side.
+   (In MCP mode the same condition is only a stderr warning.) Later steps
+   still run, since a mismatched runtime may still serve the sandbox.
+4. **Sandbox** reachable and running. The `Backend` interface has no
+   separate connect call, so steps 4 and 5 come from one `Backend.run` of
+   `uname -s` (timeout 30 s). A `BackendError` of kind `not_found`,
+   `not_running` or `unreachable` fails step 4 with the same wording and
+   hint as the `shell` tool (E3, `msb start <name>`); steps 5 and 6 are
+   skipped.
+5. **Shell** runs: that `uname -s` returns `Linux` with exit 0. A
+   `not_started` error fails here with the hint "is `<shell>` installed in
+   the image? (I4) or set --shell". On failure step 6 is skipped.
+6. **Mount** matches: list the guest root (`ls -A1 -- <guest-root>` through
+   `Backend.run`) and the host root (`fs.readdir`), and pass if the two name
+   sets are equal (case-insensitive when the host is Windows). On a mismatch,
+   print up to 5 names missing on each side; a file created between the two
+   reads can cause a false `FAIL`, so the hint says to rerun. An empty host
+   root passes with a note, since it proves nothing. Read-only; no files are
+   written on either side.
 
 `--check` is what the README's "Verify" section runs first, before the agent
 is asked to run `uname -a` (I5). It reuses `parseConfig`, the
@@ -128,8 +157,11 @@ output are new (`src/check.ts`).
 
 ### Startup runtime log (MCP mode)
 
-After the existing `version ..., microsandbox SDK ...` line, `index.ts` logs
-`runtime msb <version> from <origin> (<msbPath>)` to stderr. On a mismatch it
+After `server.connect` resolves, `index.ts` runs the runtime check without
+awaiting it in the startup path and logs
+`runtime msb <version> from <origin> (<msbPath>)` to stderr. Running it after
+connect keeps v1's property that the native module is not on the path to a
+served `initialize`. On a mismatch it
 adds `warning: msb <x> does not match SDK <y>; run shell-mcp --check`. A
 failure to resolve the runtime is logged and does not stop the server (C7):
 tool calls report the backend error as today.
@@ -149,13 +181,17 @@ tool calls report the backend error as today.
   "bugs": "https://github.com/edorosh/shell-mcp/issues",
   "keywords": ["mcp", "model-context-protocol", "sandbox", "microsandbox", "shell", "windows"],
   "bin": { "shell-mcp": "dist/index.js" },
-  "files": ["dist"],                     // README, LICENSE, CHANGELOG and package.json are always included
-  "publishConfig": { "access": "public", "provenance": true },
+  "files": ["dist", "CHANGELOG.md"],     // npm adds package.json, README and LICENSE itself, not CHANGELOG
+  "publishConfig": { "access": "public" },
   "scripts": { "prepack": "npm run build", ... }
 }
 ```
 
 - `repository.url` must match the GitHub repo exactly, or provenance fails.
+- No `provenance` in `publishConfig`. A trusted-publishing `npm publish`
+  from GitHub Actions generates provenance on its own, and forcing it would
+  make the manual first publish from a laptop (risk 5) fail with "provenance
+  generation not supported".
 - `prepack` builds before both `npm pack` and `npm publish`, so a stale or
   missing `dist/` cannot be published.
 - `dist/` holds only compiled `src/` (tests are outside `tsconfig.json`'s
@@ -255,7 +291,8 @@ release expects.
 2. Fail unless the tag equals `v` + `package.json` `version`, and unless
    `CHANGELOG.md` has a section for that version.
 3. `npm ci`, typecheck, test, then the same pack check as CI.
-4. `npm publish` (access and provenance come from `publishConfig`).
+4. `npm publish` (access comes from `publishConfig`; trusted publishing adds
+   provenance).
 5. Create a GitHub release from the changelog section.
 
 No `NPM_TOKEN` secret exists. The user configures the trusted publisher on
