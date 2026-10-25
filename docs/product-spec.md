@@ -36,7 +36,7 @@ Motivations:
 
 | Term | Meaning |
 |------|---------|
-| Host | The machine running the agent and the shell-mcp server: Windows, Linux, or macOS. |
+| Host | The machine running the agent and the shell-mcp server. v1: Windows. |
 | Sandbox | An isolated Linux environment in which commands run. |
 | Backend | The sandboxing technology providing the sandbox (v1: microsandbox). |
 | Client | The MCP host application (Claude Code, GitHub Copilot in VS Code). |
@@ -57,7 +57,7 @@ Motivations:
 - G3. The host/sandbox path difference is handled so the agent can move
   between file tools (host paths) and shell commands (sandbox paths) without
   confusion.
-- G4. Works with Claude Code and GitHub Copilot on Windows, Linux, and macOS hosts.
+- G4. Works with Claude Code and GitHub Copilot on Windows hosts.
 - G5. The server runs on the host, never inside the sandbox, so that it
   survives sandbox pause, stop, or compromise and can always report the
   sandbox's state to the agent.
@@ -70,6 +70,9 @@ Motivations:
 - N3. Interactive programs requiring a terminal (editors, password prompts,
   REPLs driven by keystrokes).
 - N4. File read/write tools. Those stay with the client's built-in tools.
+- N6. Linux and macOS hosts. Deferred to a later version. Nothing in v1
+  may assume a Windows host beyond the host-path rules of §8, so that
+  adding them later is a matter of path handling and testing.
 - N5. Backends other than microsandbox (e.g. Docker sbx). The design MUST
   NOT preclude adding them later (see §6).
 
@@ -278,7 +281,10 @@ server bridges the two deterministically.
 - P5. Command text MUST NOT be rewritten. The agent writes commands in
   sandbox terms, guided by the tool description (D2).
 - P6. Paths outside the workspace pass through unchanged in guest form.
-- P7. The mapping MUST be correct for Windows, Linux, and macOS hosts.
+- P7. The mapping MUST be correct for Windows hosts (drive letters, `\`
+  and `/` separators, case-insensitive comparison). Implementations SHOULD
+  keep the mapping parameterized by host platform so other hosts can be
+  added (N6).
 
 ## 9. Working directory
 
@@ -327,7 +333,7 @@ The project MUST ship user documentation covering:
 - I1. Creating a suitable sandbox with the project folder mounted, with a
   concrete microsandbox example.
 - I2. Registering the server in Claude Code (`.mcp.json`) and GitHub Copilot
-  (`.vscode/mcp.json`) on Windows, Linux, and macOS.
+  (`.vscode/mcp.json`) on Windows.
 - I3. Turning off each client's built-in shell tool, so the agent can only
   run commands through shell-mcp:
   - Claude Code: a permissions deny rule for `Bash` in project settings.
@@ -340,8 +346,7 @@ The project MUST ship user documentation covering:
 
 ## 13. Acceptance criteria
 
-A conforming v1 implementation passes all of these on Windows, Linux, and
-macOS hosts:
+A conforming v1 implementation passes all of these on a Windows host:
 
 1. `shell` with `echo hi` returns `hi` and exit code 0.
 2. `shell` with `exit 3` returns exit code 3 and no tool error.

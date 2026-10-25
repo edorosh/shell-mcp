@@ -32,7 +32,7 @@ returns typed exit codes, streams, and job IDs, so there is no text parsing.
 
 1. **SDK on Windows.** The `microsandbox` npm package ships native code. Confirm
    that it installs and that `Sandbox.get(name)` → `connect()` → `shell("uname -a")`
-   works on Windows, Linux, and macOS hosts.
+   works on a Windows host. (Linux/macOS hosts are deferred, spec N6.)
 2. **Version coupling.** The SDK must match the installed `msb` runtime. Record
    the tested pair and pin the SDK version exactly. Startup logs both versions
    to stderr.
