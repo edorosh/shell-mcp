@@ -22,7 +22,7 @@ node sdk-check.mjs spike *>&1 | Tee-Object -FilePath spike-output.txt
 msb create <image> --name spike-stopped
 msb stop spike-stopped
 $env:SPIKE_STOPPED = "spike-stopped"
-node sdk-check.mjs spike *>&1 | Tee-Object -FilePath spike-output.txt
+node sdk-check.mjs spike *>&1 | Tee-Object -FilePath spike-output-stopped.txt
 ```
 
 Note: the `pgrep` check on the host side only works where `pgrep` exists; the script
@@ -31,7 +31,7 @@ also runs `pgrep` inside the guest, which is the one that counts. In the guest o
 
 ## Paste back
 
-1. The full contents of `spike\spike-output-stopped.txt` (or the console output).
+1. The full contents of `spike\spike-output.txt`, and of `spike\spike-output-stopped.txt` if you ran the optional stopped-sandbox probe (or the console output).
 2. `msb --version` and the SDK version (printed under `### 7 versions`).
 3. Whether `import("microsandbox")` loaded on Windows (`### 0 load` line), or the load error.
 4. Any check that printed `UNCAUGHT`.
