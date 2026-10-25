@@ -223,6 +223,17 @@ describe.skipIf(!ENABLED)("acceptance criteria (section 13)", () => {
     const a = await svc.shell({ command: "cd gone" });
     expect(a.isError).toBe(false);
     fs.rmSync(path.join(hostDir, "gone"), { recursive: true, force: true });
+    // The guest's view of the host mount lags behind a host-side delete (seen: still visible
+    // right after, gone within 5 s). Wait until the guest no longer sees the directory, so the
+    // test checks the reset logic and not the mount's cache timing.
+    const visible = `test -d '${guestDir}/gone' && echo present || echo absent`;
+    const deadline = Date.now() + 20_000;
+    let seen = "present";
+    while (seen !== "absent" && Date.now() < deadline) {
+      seen = (await backend.run(visible, { timeoutMs: 10_000 })).output.trim();
+      if (seen !== "absent") await new Promise((r) => setTimeout(r, 500));
+    }
+    expect(seen, "the guest still sees the deleted directory after 20 s").toBe("absent");
     const r = await svc.shell({ command: "pwd" });
     expect(r.isError).toBe(false);
     expect(body(r.text).trim()).toBe(guestBase.replace(/\/+$/, "") || "/");

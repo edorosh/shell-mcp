@@ -39,3 +39,7 @@ Run on 2026-10-25 against a sandbox named `spike` (mount `C:\temp\spike-ws:/work
 
 - Passed: criteria 1–9 and 11, including 5 (`sleep 30`, `timeout_ms` 1000, process gone) and 8 (background loop, kill).
 - **Failed: criterion 12.** After the host deleted the current directory (`fs.rmSync` on `C:\temp\spike-ws\<scratch>\gone`), the next `pwd` printed `/workspace/<scratch>/gone`: the wrapper's `cd -- '<cwd>'` still succeeded in the guest, so no reset happened and no note was printed. The wrapper itself is not at fault; the guest still resolves the directory after the host deleted it, which points at the host-mount caching in the guest (to be confirmed).
+
+### Criterion 12: host-mount delay (measured by hand)
+
+`mkdir C:\temp\spike-ws\gone`, `ls -d /workspace/gone` in the guest (visible), `Remove-Item` on the host, then in the guest: the directory was **still visible immediately** (`rc=0`) and **gone after 5 s** (`rc=1`). The guest's view of host-side deletes lags, so `cd` into a just-deleted directory can still succeed. The integration test for criterion 12 now waits (up to 20 s) until the guest no longer sees the directory before running `pwd`. The window length is not yet measured.

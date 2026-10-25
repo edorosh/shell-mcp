@@ -165,6 +165,10 @@ the sandbox is running and reachable.
   output was discarded before the first read of a job, that gap is not flagged.
 - The `microsandbox` SDK and the `msb` runtime must be the same version; the
   SDK is pinned to 0.7.11 for that reason.
+- The sandbox sees host-side changes to the mounted folder with a short delay. Right
+  after a host-side delete of the current directory the guest may still resolve it
+  (observed: still visible immediately, gone within 5 s), so the next call runs there
+  instead of resetting to the workspace root; later calls reset normally.
 - Parallel calls run concurrently; the last to finish sets the working directory.
 - A command killed by a signal other than the timeout (for example `kill -9 $$`,
   or the out-of-memory killer) reports exit code -1, not 128+N: the sandbox
@@ -184,8 +188,9 @@ the sandbox is running and reachable.
 The microsandbox SDK spike (`spike/`) has been run on Windows (results in
 [spike-results.md](docs/superpowers/specs/spike-results.md)). The integration
 suite (`test/integration.test.ts`) has been run once on Windows: criteria 1–9 and
-11 pass, criterion 10 is not yet run, and criterion 12 (deleting the current
-directory from the host) fails; see spike-results.md. Behaviors that depend on the real
+11 passed, criterion 10 is not yet run, and criterion 12 (deleting the current
+directory from the host) failed because of a short host-mount delay; the test
+now waits for it and needs a re-run (see spike-results.md). Behaviors that depend on the real
 SDK are listed under [Limitations](#limitations). Linux and macOS hosts are
 deferred; see [ROADMAP.md](ROADMAP.md).
 
