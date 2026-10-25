@@ -60,4 +60,21 @@ describe("entry point", () => {
     );
     expect(r.stderr).toContain("shell-mcp");
   });
+
+  it("exits 0 promptly when stdin ends, with clean stdout", async () => {
+    const msgs = [
+      { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "t", version: "0" } } },
+      { jsonrpc: "2.0", method: "notifications/initialized" },
+      { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} },
+    ];
+    const t0 = Date.now();
+    const r = await runNode(
+      ["--sandbox", "no-such-sandbox-shell-mcp-test", "--host-root", tmpdir(), "--guest-root", "/workspace"],
+      msgs.map((m) => JSON.stringify(m)).join("\n") + "\n",
+      (out) => out.includes('"id":2'),
+    );
+    expect(r.code).toBe(0);
+    expect(Date.now() - t0).toBeLessThan(5000);
+    for (const line of r.stdout.trim().split("\n")) expect(() => JSON.parse(line)).not.toThrow();
+  });
 });

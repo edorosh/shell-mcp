@@ -44,6 +44,13 @@ async function main(): Promise<void> {
   const service = new ShellService(cfg, backend);
   const server = createServer(cfg, service);
   await server.connect(new StdioServerTransport());
+  // The client is gone once stdin ends: exit even if a command or timer is still pending, so
+  // orphaned servers do not linger.
+  const shutdown = () => {
+    void server.close().catch(() => {}).finally(() => process.exit(0));
+  };
+  process.stdin.once("end", shutdown);
+  process.stdin.once("close", shutdown);
 }
 
 main().catch((e: unknown) => {
