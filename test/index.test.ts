@@ -1,4 +1,7 @@
 import { execSync, spawn } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import path from "node:path";
 import { tmpdir } from "node:os";
 import { beforeAll, describe, expect, it } from "vitest";
 
@@ -41,6 +44,12 @@ describe("entry point", () => {
     expect(r.stdout).toBe("");
   });
 
+  it("--check against a nonexistent sandbox exits 1 with a FAIL line on stdout", async () => {
+    const r = await runNode(["--check", "--sandbox", "no-such-sandbox-shell-mcp-test", "--host-root", tmpdir(), "--guest-root", "/workspace"]);
+    expect(r.code).toBe(1);
+    expect(r.stdout).toMatch(/^FAIL/m);
+  });
+
   it("serves the four tools without contacting the sandbox", async () => {
     const msgs = [
       { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "t", version: "0" } } },
@@ -76,5 +85,22 @@ describe("entry point", () => {
     expect(r.code).toBe(0);
     expect(Date.now() - t0).toBeLessThan(5000);
     for (const line of r.stdout.trim().split("\n")) expect(() => JSON.parse(line)).not.toThrow();
+  });
+
+  it("--version prints the package and SDK versions and exits 0", async () => {
+    const readVersion = (p: string) => (JSON.parse(readFileSync(p, "utf8")) as { version: string }).version;
+    const self = readVersion("package.json");
+    const sdk = readVersion(path.join(path.dirname(createRequire(import.meta.url).resolve("microsandbox")), "..", "package.json"));
+    const r = await runNode(["--version"]);
+    expect(r.code).toBe(0);
+    expect(r.stdout).toBe(`shell-mcp ${self} (microsandbox SDK ${sdk})\n`);
+  });
+
+  it("--help prints usage on stdout, nothing on stderr, and exits 0", async () => {
+    const r = await runNode(["--help"]);
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain("--sandbox");
+    expect(r.stdout).toContain("SHELL_MCP_SANDBOX");
+    expect(r.stderr).toBe("");
   });
 });

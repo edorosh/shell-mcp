@@ -1,0 +1,39 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: write   # GitHub release
+  id-token: write   # npm trusted publishing (OIDC)
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      # Trusted publishing needs npm 11.5.1 or newer; always install it.
+      - run: npm install -g npm@^11.5.1
+      - run: node scripts/check-release.mjs "$GITHUB_REF_NAME" --notes "$RUNNER_TEMP/notes.md"
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: node scripts/check-pack.mjs
+      # 1.0.0 is published by hand, and a rerun of a half-failed release finds its version already
+      # on npm; skip the publish then so the GitHub release still gets created.
+      - name: Publish to npm
+        run: |
+          name=$(node -p "require('./package.json').name")
+          if npm view "$name@${GITHUB_REF_NAME#v}" version >/dev/null 2>&1; then
+            echo "$name@${GITHUB_REF_NAME#v} is already published; skipping npm publish"
+          else
+            npm publish
+          fi
+      - run: gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file "$RUNNER_TEMP/notes.md"
+        env:
+          GH_TOKEN: ${{ github.token }}

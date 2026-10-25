@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ConfigError, parseConfig, parseDuration } from "../src/config.js";
+import { ConfigError, parseCli, parseConfig, parseDuration } from "../src/config.js";
 
 const yes = { platform: "linux" as const, exists: () => true };
 const base = ["--sandbox", "p", "--host-root", "/h/p", "--guest-root", "/workspace/"];
@@ -56,5 +56,28 @@ describe("parseConfig", () => {
     expect(() => parseConfig(["--sandbox", "p", "--host-root", "/h", "--guest-root", "workspace"], {}, yes)).toThrow(/guest-root/);
     expect(() => parseConfig([...base, "--default-timeout", "11m"], {}, yes)).toThrow(/default-timeout/);
     expect(() => parseConfig(base, {}, yes)).not.toThrow();
+  });
+});
+
+describe("parseCli", () => {
+  it("selects version and help without validating anything else", () => {
+    expect(parseCli(["--version"], {})).toEqual({ mode: "version" });
+    expect(parseCli(["--help"], {})).toEqual({ mode: "help" });
+    expect(parseCli(["--version", "--host-root", "relative"], {})).toEqual({ mode: "version" });
+    expect(parseCli(["--version", "--bogus"], {})).toEqual({ mode: "version" });
+  });
+  it("gives --help precedence over --version", () => {
+    expect(parseCli(["--help", "--version"], {})).toEqual({ mode: "help" });
+    expect(parseCli(["--version", "--help"], {})).toEqual({ mode: "help" });
+  });
+  it("selects check with the parsed config", () => {
+    expect(parseCli(["--check", ...base], {}, yes)).toEqual({ mode: "check", config: parseConfig(base, {}, yes) });
+  });
+  it("defaults to serve", () => {
+    expect(parseCli(base, {}, yes)).toEqual({ mode: "serve", config: parseConfig(base, {}, yes) });
+  });
+  it("still validates config in check and serve modes", () => {
+    expect(() => parseCli(["--check"], {})).toThrow(ConfigError);
+    expect(() => parseCli(["--bogus", ...base], {}, yes)).toThrow(ConfigError);
   });
 });

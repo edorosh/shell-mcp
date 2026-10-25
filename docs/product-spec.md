@@ -1,6 +1,6 @@
 # shell-mcp — Product Specification
 
-Status: Draft v1 · Date: 2026-10-25
+Status: Draft v1 · Date: 2026-10-25 · v2 amendments 2026-10-25
 
 ## 1. Conventions
 
@@ -113,7 +113,9 @@ These outcomes make the product a failure even if it otherwise works:
   files (`.mcp.json` for Claude Code, `.vscode/mcp.json` for Copilot) so
   that opening a project binds it to its sandbox.
 - C9. The instance MUST NOT write anything except MCP protocol messages to
-  stdout. Diagnostics MUST go to stderr.
+  stdout while it serves MCP. Diagnostics MUST go to stderr. Informational
+  modes that exit without serving MCP (`--version`, `--help`, `--check`) MAY
+  print to stdout. (Amended 2026-10-25, v2.)
 
 ## 6. Backend
 
@@ -333,7 +335,8 @@ The project MUST ship user documentation covering:
 - I1. Creating a suitable sandbox with the project folder mounted, with a
   concrete microsandbox example.
 - I2. Registering the server in Claude Code (`.mcp.json`) and GitHub Copilot
-  (`.vscode/mcp.json`) on Windows.
+  (`.vscode/mcp.json`) on Windows, running the published package at an exact
+  version (`npx -y @edorosh/shell-mcp@<version>`). (Amended 2026-10-25, v2.)
 - I3. Turning off each client's built-in shell tool, so the agent can only
   run commands through shell-mcp:
   - Claude Code: a permissions deny rule for `Bash` in project settings.
@@ -343,6 +346,9 @@ The project MUST ship user documentation covering:
   MUST be installed in the sandbox.
 - I5. Verifying the setup, for example by asking the agent to run `uname -a`
   and confirming it reports Linux.
+- I6. Install without building: the documentation MUST give a client config
+  that runs the published package at an exact version, and MUST NOT use the
+  unscoped name `shell-mcp`. (Added 2026-10-25, v2.)
 
 ## 13. Acceptance criteria
 

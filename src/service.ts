@@ -8,6 +8,22 @@ import { extractCwd, newNonce, wrapBackground, wrapForeground } from "./wrap.js"
 export interface ToolResult { text: string; isError: boolean }
 export interface CallContext { signal?: AbortSignal; onProgress?: (elapsedSec: number) => void }
 
+const isSandboxState = (k: BackendError["kind"]) => k === "not_found" || k === "not_running" || k === "unreachable";
+
+/** Wording for a backend failure, shared by the tools and `--check`. Other kinds keep their own message. */
+export function backendErrorText(err: BackendError, sandbox: string): string {
+  switch (err.kind) {
+    case "not_found":
+      return `sandbox "${sandbox}" not found. Create it with msb create … --name ${sandbox}.`;
+    case "not_running":
+      return `sandbox "${sandbox}" is not running. Start it with: msb start ${sandbox}`;
+    case "unreachable":
+      return `sandbox "${sandbox}" is unreachable: ${err.message}. If it is stopped, start it with: msb start ${sandbox}`;
+    default:
+      return err.message;
+  }
+}
+
 export class ShellService {
   readonly jobs: JobRegistry;
   protected readonly paths: PathMapper;
@@ -200,20 +216,15 @@ export class ShellService {
   protected errorResult(e: unknown, tool: "shell" | "shell_output" | "shell_kill" | "shell_list" = "shell"): ToolResult {
     const name = this.cfg.sandbox;
     const err = e instanceof BackendError ? e : new BackendError("outcome_unknown", e instanceof Error ? e.message : String(e));
-    const startHint = `If it is stopped, start it with: msb start ${name}`;
-    const sandboxState: Partial<Record<BackendError["kind"], string>> = {
-      not_found: `sandbox "${name}" not found. Create it with msb create … --name ${name}.`,
-      not_running: `sandbox "${name}" is not running. Start it with: msb start ${name}`,
-      unreachable: `sandbox "${name}" is unreachable: ${err.message}. ${startHint}`,
-    };
+    const sandboxState = isSandboxState(err.kind) ? backendErrorText(err, name) : undefined;
     let text: string;
     if (tool === "shell") {
-      if (sandboxState[err.kind]) text = `Command was not started: ${sandboxState[err.kind]}`;
+      if (sandboxState) text = `Command was not started: ${sandboxState}`;
       else if (err.kind === "not_started") text = `Command was not started: ${err.message}`;
       else text = `Command may have started but its outcome is unknown: ${err.message}. Check the sandbox state; do not retry side-effecting commands blindly.`;
     } else {
       const what = { shell_output: "Could not read job output", shell_kill: "Job was not killed", shell_list: "Could not list jobs" }[tool];
-      if (sandboxState[err.kind]) text = `${what}: ${sandboxState[err.kind]}`;
+      if (sandboxState) text = `${what}: ${sandboxState}`;
       else if (tool === "shell_kill") {
         text = `Kill request outcome is unknown: ${err.message}. Check the job with shell_output or shell_list before retrying.`;
       } else text = `${what}: ${err.message}. Check the sandbox state and try again.`;
