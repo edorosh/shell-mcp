@@ -12,7 +12,10 @@ export class PathMapper {
     platform: NodeJS.Platform,
   ) {
     this.hostPath = platform === "win32" ? path.win32 : path.posix;
-    this.hostRoot = this.hostPath.normalize(hostRoot).replace(/(.)[\\/]+$/, "$1");
+    const norm = this.hostPath.normalize(hostRoot);
+    const stripped = norm.replace(/(.)[\\/]+$/, "$1");
+    // Keep a bare drive root ("C:\\"): "C:" would make join drive-relative.
+    this.hostRoot = /^[A-Za-z]:$/.test(stripped) ? norm : stripped;
     this.guestRoot = path.posix.normalize(guestRoot).replace(/(.)\/+$/, "$1");
     const escaped = this.guestRoot.replace(/[.*+?^${}()|[\]\\\/-]/g, "\\$&");
     this.re = new RegExp(

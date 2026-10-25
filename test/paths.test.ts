@@ -24,11 +24,18 @@ describe("toHost", () => {
     expect(m.toHost("/workspace")).toBe("c:\\Users\\e\\proj");
     expect(m.toHost("/workspace/x")).toBe("c:\\Users\\e\\proj\\x");
   });
+  it.each(["C:\\", "C:/"])("keeps a drive root %s absolute", (root) => {
+    const m = new PathMapper(root, "/workspace", "win32");
+    expect(m.toHost("/workspace")).toBe("C:\\");
+    expect(m.toHost("/workspace/x")).toBe("C:\\x");
+  });
   it("handles guest root /", () => {
     const m = new PathMapper("C:\\p", "/", "win32");
     expect(m.toHost("/")).toBe("C:\\p");
     expect(m.toHost("/a/b")).toBe("C:\\p\\a\\b");
-    expect(() => m.rewriteOutput("x /a y")).not.toThrow();
+    // Documented limit: with guest root "/" the lookahead only matches a bare "/".
+    expect(m.rewriteOutput("x /a/b y")).toBe("x /a/b y");
+    expect(m.rewriteOutput("cwd=/")).toBe("cwd=C:\\p");
   });
   it("maps on linux", () => {
     expect(lin.toHost("/workspace/src")).toBe("/home/e/proj/src");
