@@ -23,6 +23,13 @@ describe("shQuote / newNonce / pure extractCwd", () => {
     expect(r.cwd).toBe("/b");
     expect(r.output).toBe("x\n");
   });
+  it("ignores markers that do not start a line", () => {
+    const r = extractCwd(`a __SHELLMCP_RESET_n__\nb "__SHELLMCP_CWD_n__" "$PWD"\n`, "n");
+    expect(r).toEqual({ output: `a __SHELLMCP_RESET_n__\nb "__SHELLMCP_CWD_n__" "$PWD"\n`, cwd: null, reset: false });
+  });
+  it("strips a reset line at the start", () => {
+    expect(extractCwd("__SHELLMCP_RESET_n__\nx\n", "n")).toEqual({ output: "x\n", cwd: null, reset: true });
+  });
   it("reports no marker as null", () => {
     expect(extractCwd("hi\n", "n")).toEqual({ output: "hi\n", cwd: null, reset: false });
   });
@@ -96,6 +103,29 @@ describe.skipIf(process.platform === "win32")("wrapped scripts under bash", () =
     const r = fg("echo __SHELLMCP_CWD_0000000000000000__/etc", join(tmp, "sub"));
     expect(r.output).toBe("__SHELLMCP_CWD_0000000000000000__/etc\n");
     expect(r.cwd).toBe(join(tmp, "sub"));
+  });
+  it("the script never contains a contiguous marker", () => {
+    const s = wrapForeground("true", join(tmp, "gone"), tmp, nonce);
+    expect(s).not.toContain(`__SHELLMCP_CWD_${nonce}__`);
+    expect(s).not.toContain(`__SHELLMCP_RESET_${nonce}__`);
+  });
+  it("printing the running script does not forge a reset or move the cwd", () => {
+    const r = fg('echo "$BASH_EXECUTION_STRING"', join(tmp, "sub"));
+    expect(r.reset).toBe(false);
+    expect(r.cwd).toBe(join(tmp, "sub"));
+    expect(r.output).toContain("trap ");
+    expect(r.output).toContain("__SHELLMCP_");
+  });
+  it.skipIf(process.platform !== "linux")("cat /proc/$$/cmdline does not forge a reset or move the cwd", () => {
+    const r = fg("cat /proc/$$/cmdline; echo", join(tmp, "sub"));
+    expect(r.reset).toBe(false);
+    expect(r.cwd).toBe(join(tmp, "sub"));
+    expect(r.output).toContain("trap ");
+  });
+  it("a forged real-nonce marker in the middle of a line is not taken", () => {
+    const r = fg(`echo "x __SHELLMCP_CWD_${nonce}__/etc"`, join(tmp, "sub"));
+    expect(r.cwd).toBe(join(tmp, "sub"));
+    expect(r.output).toBe(`x __SHELLMCP_CWD_${nonce}__/etc\n`);
   });
   it("background: missing cwd prints a note", () => {
     const script = wrapBackground("pwd", join(tmp, "gone"), tmp);
