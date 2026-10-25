@@ -95,7 +95,7 @@ export class ShellService {
       let gap = false;
       if (rec.pending === "") {
         const r = await this.backend.readJob(rec.id, rec.cursor);
-        rec.cursor = r.cursor;
+        rec.cursor = r.cursor ?? rec.cursor; // an empty read may omit the cursor; never reset it
         gap = r.gap;
         rec.pending = this.cfg.rewriteOutputPaths ? this.paths.rewriteOutput(r.text) : r.text;
       }
@@ -103,7 +103,7 @@ export class ShellService {
       let cut = Math.min(rec.pending.length, this.cfg.maxOutput);
       if (cut < rec.pending.length && cut > 0) {
         const c = rec.pending.charCodeAt(cut - 1);
-        if (c >= 0xd800 && c <= 0xdbff) cut -= 1; // do not split a surrogate pair
+        if (c >= 0xd800 && c <= 0xdbff) cut = cut > 1 ? cut - 1 : 2; // do not split a pair; always make progress
       }
       const chunk = rec.pending.slice(0, cut);
       rec.pending = rec.pending.slice(cut);
@@ -127,6 +127,9 @@ export class ShellService {
       }
       const res = await this.backend.killJob(rec.id, 3000);
       const st = res.status;
+      // Heuristic: exit code 0 or a launch error means the job ended on its own. Ambiguous: a job
+      // that traps SIGTERM and exits 0 is reported as exited, not killed; a natural non-zero exit
+      // inside the window is labelled killed.
       if (res.confirmed && st.state === "exited" && (st.exitCode === 0 || st.error !== undefined)) {
         // The job finished on its own between the status check and the kill.
         return { text: `job ${rec.id} had already finished: ${this.statusText(rec, st)}`, isError: false };

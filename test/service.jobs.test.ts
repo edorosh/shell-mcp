@@ -59,6 +59,25 @@ describe("output", () => {
     expect(fb.readCalls).toHaveLength(1);
   });
 
+  it("keeps the cursor across an empty read that omits it", async () => {
+    const { fb, svc } = setup();
+    fb.readQueue.push({ text: "a", cursor: "c1" }, { text: "" }, { text: "b", cursor: "c3" });
+    for (let i = 0; i < 3; i++) await svc.output({ job_id: "job1" });
+    expect(fb.readCalls.map((c) => c.cursor)).toEqual([undefined, "c1", "c1"]);
+  });
+
+  it("pages astral text with max-output 1 to completion", async () => {
+    const { fb, svc } = setup(mk(["--max-output", "1"]));
+    const big = "😀😀x😀";
+    fb.readQueue.push({ text: big, cursor: "c1" });
+    let got = "";
+    for (let i = 0; i < 6; i++) {
+      const r = await svc.output({ job_id: "job1" });
+      got += r.text.split("\n---\n")[1]!.split("\n[")[0]!;
+    }
+    expect(got).toBe(big);
+  });
+
   it("reports a gap", async () => {
     const { fb, svc } = setup();
     fb.readQueue.push({ text: "x", cursor: "c", gap: true });
