@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { BackendError } from "../src/backend/types.js";
 import { type Config, parseConfig } from "../src/config.js";
 import { ShellService } from "../src/service.js";
 import { FakeBackend } from "./fakeBackend.js";
@@ -152,5 +153,27 @@ describe("list", () => {
     expect(lines).toHaveLength(2);
     expect(lines[0]).toBe("job1  running  2026-01-02T03:04:05.000Z  sleep 100");
     expect(lines[1]).toBe("job2  exited (exit code 0)  2026-01-02T03:04:05.000Z  make…");
+  });
+});
+
+describe("job tool errors", () => {
+  it("do not use the shell tool's started/not-started wording", async () => {
+    const { fb, svc } = setup();
+    fb.jobError = new BackendError("not_running", "stopped");
+    for (const r of [await svc.output({ job_id: "job1" }), await svc.kill({ job_id: "job1" }), await svc.list()]) {
+      expect(r.isError).toBe(true);
+      expect(r.text).not.toContain("Command");
+      expect(r.text).toContain('sandbox "sb" is not running. Start it with: msb start sb');
+    }
+    fb.jobError = new BackendError("unreachable", "no daemon");
+    const u = await svc.list();
+    expect(u.text).toBe('Could not list jobs: sandbox "sb" is unreachable: no daemon. If it is stopped, start it with: msb start sb');
+    fb.jobError = new BackendError("outcome_unknown", "stream reset");
+    expect((await svc.output({ job_id: "job1" })).text).toBe(
+      "Could not read job output: stream reset. Check the sandbox state and try again.",
+    );
+    const k = await svc.kill({ job_id: "job1" });
+    expect(k.text).toContain("Kill request outcome is unknown: stream reset");
+    expect(k.text).not.toContain("Command");
   });
 });

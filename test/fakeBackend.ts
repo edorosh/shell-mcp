@@ -11,6 +11,8 @@ export class FakeBackend implements Backend {
   nextJobId = "job1";
   jobStatuses = new Map<string, JobStatus>();
   startError?: Error;
+  /** Thrown by readJob, jobStatus and killJob when set. */
+  jobError?: Error;
 
   queueRun(r: RunResult | Error | ((c: RunCall) => RunResult | Promise<RunResult>)): this {
     this.queue.push(r);
@@ -48,15 +50,18 @@ export class FakeBackend implements Backend {
 
   async readJob(id: string, cursor?: string): Promise<{ text: string; cursor?: string; gap: boolean }> {
     this.readCalls.push({ id, cursor });
+    if (this.jobError) throw this.jobError;
     const n = this.readQueue.shift();
     if (!n) return { text: "", cursor, gap: false };
     return { text: n.text, cursor: n.cursor, gap: n.gap ?? false };
   }
   async jobStatus(id: string): Promise<JobStatus> {
+    if (this.jobError) throw this.jobError;
     return this.jobStatuses.get(id) ?? { state: "running" };
   }
   async killJob(id: string, waitMs: number): Promise<{ confirmed: boolean; status: JobStatus }> {
     this.killCalls.push({ id, waitMs });
+    if (this.jobError) throw this.jobError;
     return this.killResult;
   }
 }

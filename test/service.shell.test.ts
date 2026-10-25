@@ -115,7 +115,12 @@ describe("ShellService.shell foreground", () => {
     expect(r.text).toContain("outcome is unknown");
     fb.queueRun(new BackendError("unreachable", "no daemon"));
     r = await svc.shell({ command: "x" });
-    expect(r.text).toBe("Command was not started: no daemon");
+    expect(r.text).toBe(
+      'Command was not started: sandbox "sb" is unreachable: no daemon. If it is stopped, start it with: msb start sb',
+    );
+    fb.queueRun(new BackendError("not_started", "bash: not found"));
+    r = await svc.shell({ command: "x" });
+    expect(r.text).toBe("Command was not started: bash: not found");
   });
 
   it("concurrent calls: last finisher wins cwd, both built from the same cwd", async () => {

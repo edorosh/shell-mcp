@@ -133,6 +133,7 @@ type Stop = "deadline" | "abort";
 
 export class MicrosandboxBackend implements Backend {
   private conn?: Promise<SdkSandbox>;
+  private sdk?: SdkModule;
   private readonly jobDecoders = new Map<string, Map<string, Utf8Accumulator>>();
   private readonly loadSdk: () => Promise<SdkModule>;
   private readonly now: () => number;
@@ -154,14 +155,14 @@ export class MicrosandboxBackend implements Backend {
     const { timeoutMs, signal } = opts;
     const cancelled = () => new BackendError("not_started", "cancelled before start");
     if (signal?.aborted) throw cancelled();
-    const sb = await this.connect();
+    const { sb, cached } = await this.connectTracked();
     if (signal?.aborted) throw cancelled();
     const start = this.now();
     let handle: SdkExecHandle;
     try {
       handle = await sb.execStreamWith(this.shell, (b) => b.args(["-c", script]).timeout(timeoutMs).stdinNull());
     } catch (e) {
-      throw this.fail(e, "before");
+      throw await this.failChecked(e, "before", cached);
     }
 
     const out = new CappedText(2 * this.maxOutput, 2 * this.maxOutput);
@@ -213,7 +214,7 @@ export class MicrosandboxBackend implements Backend {
       }
     } catch (e) {
       if (codeOf(e) === "execTimeout") execTimeout = true;
-      else throw this.fail(e, "after");
+      else throw await this.failChecked(e, "after", cached);
     } finally {
       for (const t of timers) clearTimeout(t);
       signal?.removeEventListener("abort", onAbort);
@@ -245,7 +246,7 @@ export class MicrosandboxBackend implements Backend {
   }
 
   async startJob(script: string): Promise<{ id: string }> {
-    const sb = await this.connect();
+    const { sb, cached } = await this.connectTracked();
     try {
       const job = await sb.execDetachedWith(this.shell, (b) => b.args(["-c", script]).stdinNull());
       return { id: job.id };
@@ -254,12 +255,12 @@ export class MicrosandboxBackend implements Backend {
         const jobId = (e as { jobId?: string }).jobId;
         throw new BackendError("outcome_unknown", jobId ? `${msgOf(e)} (job ${jobId})` : msgOf(e));
       }
-      throw this.fail(e, "before");
+      throw await this.failChecked(e, "before", cached);
     }
   }
 
   async readJob(id: string, cursor?: string): Promise<{ text: string; cursor?: string; gap: boolean }> {
-    const sb = await this.connect();
+    const { sb, cached } = await this.connectTracked();
     try {
       const job = await sb.getJob(id);
       let gap = false;
@@ -295,22 +296,22 @@ export class MicrosandboxBackend implements Backend {
       return next === undefined ? { text, gap } : { text, cursor: next, gap };
     } catch (e) {
       if (codeOf(e) === "job_not_found") return { text: "", gap: false };
-      throw this.fail(e, "query");
+      throw await this.failChecked(e, "query", cached);
     }
   }
 
   async jobStatus(id: string): Promise<JobStatus> {
-    const sb = await this.connect();
+    const { sb, cached } = await this.connectTracked();
     try {
       return mapState(await (await sb.getJob(id)).inspect());
     } catch (e) {
       if (codeOf(e) === "job_not_found") return { state: "unknown" };
-      throw this.fail(e, "query");
+      throw await this.failChecked(e, "query", cached);
     }
   }
 
   async killJob(id: string, waitMs: number): Promise<{ confirmed: boolean; status: JobStatus }> {
-    const sb = await this.connect();
+    const { sb, cached } = await this.connectTracked();
     try {
       const job = await sb.getJob(id);
       try {
@@ -330,7 +331,7 @@ export class MicrosandboxBackend implements Backend {
         await new Promise((r) => setTimeout(r, Math.min(100, left)));
       }
     } catch (e) {
-      throw this.fail(e, "query");
+      throw await this.failChecked(e, "query", cached);
     }
   }
 
@@ -340,6 +341,12 @@ export class MicrosandboxBackend implements Backend {
     let s = "";
     for (const acc of decs?.values() ?? []) s += acc.finish();
     return s;
+  }
+
+  /** cached: the connection existed before this call, so it may be stale. */
+  private async connectTracked(): Promise<{ sb: SdkSandbox; cached: boolean }> {
+    const cached = this.conn !== undefined;
+    return { sb: await this.connect(), cached };
   }
 
   private connect(): Promise<SdkSandbox> {
@@ -356,7 +363,7 @@ export class MicrosandboxBackend implements Backend {
   private async open(): Promise<SdkSandbox> {
     let sdk: SdkModule;
     try {
-      sdk = await this.loadSdk();
+      sdk = this.sdk ?? (this.sdk = await this.loadSdk());
     } catch (e) {
       throw new BackendError("unreachable", `microsandbox SDK failed to load: ${msgOf(e)}`);
     }
@@ -373,6 +380,39 @@ export class MicrosandboxBackend implements Backend {
       return await handle.connectWithTimeout(10_000);
     } catch (e) {
       throw this.fail(e, "before");
+    }
+  }
+
+  /**
+   * fail(), plus: a connection-class error on a cached connection may mean the sandbox was
+   * stopped or removed since we connected. Re-check it so the agent gets the not_running /
+   * not_found message (with the msb hint) instead of a bare "unreachable". A process may
+   * already exist in the "after" phase, so that stays outcome_unknown with the hint appended.
+   */
+  private async failChecked(e: unknown, phase: "before" | "after" | "query", cached: boolean): Promise<BackendError> {
+    const err = this.fail(e, phase);
+    const code = codeOf(e);
+    const connectionClass = !(e instanceof BackendError) && (code === undefined || CONNECTION.has(code));
+    if (!cached || !connectionClass) return err;
+    const probed = await this.probe();
+    if (!probed) return err;
+    if (phase === "after") {
+      return new BackendError("outcome_unknown", `${err.message} (${probed.message}; start it with: msb start ${this.sandboxName})`);
+    }
+    return probed;
+  }
+
+  /** The sandbox's current state when it is not usable; undefined when running or unknown. */
+  private async probe(): Promise<BackendError | undefined> {
+    try {
+      const sdk = this.sdk ?? (this.sdk = await this.loadSdk());
+      const handle = await sdk.Sandbox.get(this.sandboxName);
+      if (handle.status === "running") return undefined;
+      return new BackendError("not_running", `sandbox "${this.sandboxName}" is ${handle.status}`);
+    } catch (e) {
+      const code = codeOf(e);
+      if (code !== undefined && NOT_FOUND.has(code)) return new BackendError("not_found", msgOf(e));
+      return undefined;
     }
   }
 

@@ -186,10 +186,12 @@ describe.skipIf(!ENABLED)("acceptance criteria (section 13)", () => {
   });
 
   it.skipIf(!ALLOW_STOP)("10. with the sandbox stopped, shell errors naming it and how to start it; after start the next call succeeds", async () => {
-    execFileSync("msb", ["stop", sandbox], { stdio: "inherit" });
-    // A server started while the sandbox is stopped (no cached connection from beforeEach).
-    make();
+    // A long-running server: this service already holds a cached connection (beforeEach), and
+    // one more call on it right before the stop keeps that connection warm.
     const stoppedSvc = svc;
+    const before = await stoppedSvc.shell({ command: "echo before" });
+    expect(before.isError, before.text).toBe(false);
+    execFileSync("msb", ["stop", sandbox], { stdio: "inherit" });
     try {
       const r = await stoppedSvc.shell({ command: "echo hi" });
       expect(r.isError).toBe(true);

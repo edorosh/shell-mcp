@@ -107,18 +107,20 @@ class FakeSandbox implements SdkSandbox {
 function setup(opts: { status?: string; getError?: SdkErr; connectError?: SdkErr; maxOutput?: number; clock?: number[]; graceMs?: number } = {}) {
   const sb = new FakeSandbox();
   const calls = { get: 0, connect: 0, load: 0 };
+  // Mutable so a test can stop or remove the sandbox after the first connection.
+  const ctl = { status: opts.status ?? "running", getError: opts.getError, connectError: opts.connectError };
   const sdk: SdkModule = {
     Sandbox: {
       get: async (name: string) => {
         calls.get++;
         expect(name).toBe("proj");
-        if (opts.getError) throw opts.getError;
+        if (ctl.getError) throw ctl.getError;
         return {
-          status: opts.status ?? "running",
+          status: ctl.status,
           connectWithTimeout: async (ms: number) => {
             calls.connect++;
             expect(ms).toBe(10_000);
-            if (opts.connectError) throw opts.connectError;
+            if (ctl.connectError) throw ctl.connectError;
             return sb;
           },
         };
@@ -134,7 +136,7 @@ function setup(opts: { status?: string; getError?: SdkErr; connectError?: SdkErr
     now: clock ? () => (clock.length > 1 ? clock.shift()! : clock[0]!) : undefined,
     graceMs: opts.graceMs,
   });
-  return { be, sb, calls };
+  return { be, sb, calls, ctl };
 }
 
 async function kindOf(p: Promise<unknown>): Promise<string> {
@@ -186,6 +188,100 @@ describe("MicrosandboxBackend connection", () => {
       },
     });
     expect(await kindOf(be.run("x", { timeoutMs: 1 }))).toBe("unreachable");
+  });
+});
+
+describe("MicrosandboxBackend cached connection to a since-stopped sandbox", () => {
+  async function cached() {
+    const t = setup();
+    await t.be.run("true", { timeoutMs: 1000 });
+    expect(t.calls.get).toBe(1);
+    return t;
+  }
+
+  it("re-checks the sandbox and maps an exec connection error to not_running", async () => {
+    const { be, sb, calls, ctl } = await cached();
+    sb.execError = new SdkErr("io", "broken pipe");
+    ctl.status = "stopped";
+    await expect(be.run("x", { timeoutMs: 1000 })).rejects.toMatchObject({ kind: "not_running" });
+    expect(calls.get).toBe(2);
+    // The cache was dropped: the next call opens again (and still sees the stopped sandbox).
+    expect(await kindOf(be.run("x", { timeoutMs: 1000 }))).toBe("not_running");
+    expect(calls.get).toBe(3);
+    expect(calls.connect).toBe(1);
+  });
+
+  it("maps to not_found when the sandbox was removed", async () => {
+    const { be, sb, ctl } = await cached();
+    sb.execError = new SdkErr("protocol");
+    ctl.getError = new SdkErr("sandboxNotFound");
+    expect(await kindOf(be.run("x", { timeoutMs: 1000 }))).toBe("not_found");
+  });
+
+  it("keeps unreachable when the sandbox still reports running", async () => {
+    const { be, sb } = await cached();
+    sb.execError = new SdkErr("io");
+    expect(await kindOf(be.run("x", { timeoutMs: 1000 }))).toBe("unreachable");
+  });
+
+  it("keeps unreachable when the re-check itself fails", async () => {
+    const { be, sb, ctl } = await cached();
+    sb.execError = new SdkErr("io");
+    ctl.getError = new SdkErr("io", "daemon down");
+    expect(await kindOf(be.run("x", { timeoutMs: 1000 }))).toBe("unreachable");
+  });
+
+  it("does not re-check on a fresh connection", async () => {
+    const { be, sb, calls } = setup();
+    sb.execError = new SdkErr("io");
+    expect(await kindOf(be.run("x", { timeoutMs: 1000 }))).toBe("unreachable");
+    expect(calls.get).toBe(1);
+  });
+
+  it("does not re-check for a non-connection error", async () => {
+    const { be, sb, calls } = await cached();
+    sb.execError = new SdkErr("invalidConfig");
+    expect(await kindOf(be.run("x", { timeoutMs: 1000 }))).toBe("not_started");
+    expect(calls.get).toBe(1);
+  });
+
+  it("a stream error on a stopped sandbox stays outcome_unknown but names msb start", async () => {
+    const { be, sb, ctl } = await cached();
+    sb.script.events = [{ kind: "stdout", data: enc("x") }, new SdkErr("protocol", "stream reset")];
+    ctl.status = "stopped";
+    const err = await be.run("x", { timeoutMs: 1000 }).catch((e: BackendError) => e);
+    expect(err).toBeInstanceOf(BackendError);
+    expect((err as BackendError).kind).toBe("outcome_unknown");
+    expect((err as BackendError).message).toContain("stream reset");
+    expect((err as BackendError).message).toContain("msb start proj");
+  });
+
+  it("maps job calls on a stopped sandbox to not_running", async () => {
+    const { be, sb, ctl } = await cached();
+    const { id } = await be.startJob("x");
+    const job = sb.jobs.get(id)!;
+    ctl.status = "stopped";
+    job.logPages = [new SdkErr("sandbox_error")];
+    expect(await kindOf(be.readJob(id))).toBe("not_running");
+    // Each failing call re-opens first, which already sees the stopped sandbox.
+    ctl.status = "running";
+    await be.jobStatus(id);
+    sb.getJob = async () => { throw new SdkErr("io"); };
+    ctl.status = "stopped";
+    expect(await kindOf(be.jobStatus(id))).toBe("not_running");
+  });
+
+  it("maps startJob and killJob on a stopped sandbox to not_running", async () => {
+    const { be, sb, ctl } = await cached();
+    sb.execError = new SdkErr("io");
+    ctl.status = "stopped";
+    expect(await kindOf(be.startJob("x"))).toBe("not_running");
+    ctl.status = "running";
+    sb.execError = undefined;
+    const { id } = await be.startJob("x");
+    sb.jobs.get(id)!.killError = new SdkErr("runtime");
+    ctl.status = "stopped";
+    expect(await kindOf(be.killJob(id, 10))).toBe("not_running");
   });
 });
 

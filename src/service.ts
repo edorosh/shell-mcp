@@ -113,7 +113,7 @@ export class ShellService {
       if (rec.pending !== "") text += "\n[more output pending; call shell_output again]";
       return { text, isError: false };
     } catch (e) {
-      return this.errorResult(e);
+      return this.errorResult(e, "shell_output");
     }
   }
 
@@ -142,7 +142,7 @@ export class ShellService {
         isError: false,
       };
     } catch (e) {
-      return this.errorResult(e);
+      return this.errorResult(e, "shell_kill");
     }
   }
 
@@ -157,7 +157,7 @@ export class ShellService {
       }
       return { text: lines.join("\n"), isError: false };
     } catch (e) {
-      return this.errorResult(e);
+      return this.errorResult(e, "shell_list");
     }
   }
 
@@ -180,23 +180,30 @@ export class ShellService {
     }
   }
 
-  protected errorResult(e: unknown): ToolResult {
+  /**
+   * The shell tool must say whether the command was started (E3). The job tools never start
+   * a command, so they get their own wording.
+   */
+  protected errorResult(e: unknown, tool: "shell" | "shell_output" | "shell_kill" | "shell_list" = "shell"): ToolResult {
     const name = this.cfg.sandbox;
     const err = e instanceof BackendError ? e : new BackendError("outcome_unknown", e instanceof Error ? e.message : String(e));
+    const startHint = `If it is stopped, start it with: msb start ${name}`;
+    const sandboxState: Partial<Record<BackendError["kind"], string>> = {
+      not_found: `sandbox "${name}" not found. Create it with msb create … --name ${name}.`,
+      not_running: `sandbox "${name}" is not running. Start it with: msb start ${name}`,
+      unreachable: `sandbox "${name}" is unreachable: ${err.message}. ${startHint}`,
+    };
     let text: string;
-    switch (err.kind) {
-      case "not_found":
-        text = `Command was not started: sandbox "${name}" not found. Create it with msb create … --name ${name}.`;
-        break;
-      case "not_running":
-        text = `Command was not started: sandbox "${name}" is not running. Start it with: msb start ${name}`;
-        break;
-      case "unreachable":
-      case "not_started":
-        text = `Command was not started: ${err.message}`;
-        break;
-      default:
-        text = `Command may have started but its outcome is unknown: ${err.message}. Check the sandbox state; do not retry side-effecting commands blindly.`;
+    if (tool === "shell") {
+      if (sandboxState[err.kind]) text = `Command was not started: ${sandboxState[err.kind]}`;
+      else if (err.kind === "not_started") text = `Command was not started: ${err.message}`;
+      else text = `Command may have started but its outcome is unknown: ${err.message}. Check the sandbox state; do not retry side-effecting commands blindly.`;
+    } else {
+      const what = { shell_output: "Could not read job output", shell_kill: "Job was not killed", shell_list: "Could not list jobs" }[tool];
+      if (sandboxState[err.kind]) text = `${what}: ${sandboxState[err.kind]}`;
+      else if (tool === "shell_kill") {
+        text = `Kill request outcome is unknown: ${err.message}. Check the job with shell_output or shell_list before retrying.`;
+      } else text = `${what}: ${err.message}. Check the sandbox state and try again.`;
     }
     return { text, isError: true };
   }
