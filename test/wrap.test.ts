@@ -27,6 +27,12 @@ describe("shQuote / newNonce / pure extractCwd", () => {
     const r = extractCwd(`a __SHELLMCP_RESET_n__\nb "__SHELLMCP_CWD_n__" "$PWD"\n`, "n");
     expect(r).toEqual({ output: `a __SHELLMCP_RESET_n__\nb "__SHELLMCP_CWD_n__" "$PWD"\n`, cwd: null, reset: false });
   });
+  it("strips a reset marker that follows output without a trailing newline", () => {
+    // stdout ("no newline") can reach the merged stream before the reset marker the wrapper
+    // printed first; the marker carries its own leading newline, like the cwd marker.
+    expect(extractCwd("no newline\n__SHELLMCP_RESET_n__\n", "n")).toEqual({ output: "no newline", cwd: null, reset: true });
+    expect(extractCwd("y\n\n__SHELLMCP_RESET_n__\nz", "n")).toEqual({ output: "y\nz", cwd: null, reset: true });
+  });
   it("strips a reset line at the start", () => {
     expect(extractCwd("__SHELLMCP_RESET_n__\nx\n", "n")).toEqual({ output: "x\n", cwd: null, reset: true });
   });
@@ -98,6 +104,13 @@ describe.skipIf(process.platform === "win32")("wrapped scripts under bash", () =
     expect(r.cwd).toBe(tmp);
     expect(r.output).toBe(`${tmp}\n`);
     expect(r.output).not.toContain("SHELLMCP");
+  });
+  it("missing cwd with output lacking a trailing newline, stdout delivered before stderr", () => {
+    // Worst-case arrival order: the command's stdout reaches the merged stream before the
+    // reset and cwd markers the wrapper wrote to stderr.
+    const q = spawnSync("bash", ["-c", wrapForeground("printf 'no newline'", join(tmp, "gone"), tmp, nonce)], { encoding: "utf8" });
+    const r = extractCwd(q.stdout + q.stderr, nonce);
+    expect(r).toEqual({ output: "no newline", cwd: tmp, reset: true });
   });
   it("forged marker with another nonce is kept", () => {
     const r = fg("echo __SHELLMCP_CWD_0000000000000000__/etc", join(tmp, "sub"));

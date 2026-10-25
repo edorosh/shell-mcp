@@ -30,7 +30,7 @@ export function wrapForeground(
 ): string {
   const tail = shQuote(`${nonce}__`);
   return (
-    `cd -- ${shQuote(cwd)} 2>/dev/null || { cd -- ${shQuote(guestRoot)}; printf '%s%s%s\\n' '__SHELLMCP_' 'RESET_' ${tail} >&2; }\n` +
+    `cd -- ${shQuote(cwd)} 2>/dev/null || { cd -- ${shQuote(guestRoot)}; printf '\\n%s%s%s\\n' '__SHELLMCP_' 'RESET_' ${tail} >&2; }\n` +
     `trap 'printf "\\n%s%s%s%s\\n" "__SHELLMCP_" "CWD_" "${nonce}__" "$PWD" >&2' EXIT\n` +
     command +
     "\n"
@@ -54,7 +54,7 @@ function escapeRe(s: string): string {
 /**
  * Finds the last cwd marker that starts a line (stderr may arrive before
  * stdout), strips every such marker line (plus the newline the trap printed
- * before it) and the reset line. Markers with another nonce, or not at the
+ * before it) and the reset line (likewise with its own leading newline). Markers with another nonce, or not at the
  * start of a line, are left untouched.
  */
 export function extractCwd(
@@ -67,11 +67,13 @@ export function extractCwd(
     cwd = p;
     return "";
   });
-  const resetRe = new RegExp(`(^|\\n)${escapeRe(RESET_PREFIX + nonce + "__")}\\n?`, "g");
+  // Like the cwd marker, the reset marker is printed with a leading newline of its own, so it
+  // still starts a line when the command's output before it had no trailing newline.
+  const resetRe = new RegExp(`(?:^|\\n)${escapeRe(RESET_PREFIX + nonce + "__")}\\n?`, "g");
   let reset = false;
-  out = out.replace(resetRe, (_m, lead: string) => {
+  out = out.replace(resetRe, () => {
     reset = true;
-    return lead;
+    return "";
   });
   return { output: out, cwd, reset };
 }
