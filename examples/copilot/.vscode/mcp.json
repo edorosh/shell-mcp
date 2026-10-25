@@ -1,0 +1,14 @@
+{
+  "servers": {
+    "sandbox": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "C:\\Users\\eugen\\dev\\shell-mcp\\dist\\index.js",
+        "--sandbox", "myproj",
+        "--host-root", "C:\\Users\\eugen\\dev\\myproj",
+        "--guest-root", "/workspace"
+      ]
+    }
+  }
+}

@@ -1,1 +1,3 @@
 shell-mcp.code-workspace
+node_modules/
+dist/

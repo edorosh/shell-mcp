@@ -352,6 +352,9 @@ A conforming v1 implementation passes all of these on a Windows host:
 2. `shell` with `exit 3` returns exit code 3 and no tool error.
 3. `cd src` followed by `pwd` reports the guest path of `src`, and the
    result's current directory shows the host path of `src`.
+   Note (ruling): verified with `--no-rewrite-output-paths`. With default
+   path rewriting (P4), `pwd` prints the host form; the current-directory
+   field shows the host form either way.
 4. `export X=1` followed by `echo $X` prints an empty line.
 5. `sleep 30` with `timeout_ms` 1000 returns within a few seconds, marked as
    timed out, and the process is gone from the sandbox.
@@ -371,3 +374,6 @@ A conforming v1 implementation passes all of these on a Windows host:
     file tools at the host path.
 12. Deleting the current directory from the host, then running `pwd`, runs
     in the guest root and reports the reset.
+    Note (ruling): verified with `--no-rewrite-output-paths`, for the same
+    reason as criterion 3 (with default rewriting, `pwd` prints the host form;
+    the current-directory field shows the host form either way).
