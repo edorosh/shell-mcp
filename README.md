@@ -203,9 +203,15 @@ output. No client setting was changed. Copilot showed no progress indication whi
 waiting. Background jobs, `shell_output`, `shell_kill` and `shell_list` worked
 as expected, including a `sleep 700` job that was killed with its process gone.
 
-**Claude Code:** not checked yet. Claude Code's MCP tool timeout is set with the
-`MCP_TOOL_TIMEOUT` environment variable (milliseconds). If long calls are cut
-off, raise it above your `max-timeout`.
+**Claude Code, checked on Windows on 2026-10-25:** all steps passed with
+`MCP_TOOL_TIMEOUT` unset. Calls longer than 120 s are not cut off: Claude Code
+moves the still-open call to a background task ("still running after 120s ...
+moved to the background") and the agent picks up the result when it completes.
+`sleep 300` and `sleep 540` (`timeout_ms: 600000`) both finished with their
+output. Such a background task does not survive exiting the Claude Code session.
+No progress indication was shown beyond that one notice. If your Claude Code
+version cuts long calls off instead, raise `MCP_TOOL_TIMEOUT` (milliseconds)
+above your `max-timeout`.
 
 **Leave headroom under the timeout.** In the sandbox, `sleep` ran about 3% longer
 than requested (90 s took 93 s, 300 s took 310 s, 540 s took 556 s), so
@@ -309,7 +315,7 @@ The microsandbox SDK spike (`spike/`) has been run on Windows (results in
 [spike-results.md](docs/superpowers/specs/spike-results.md)). The integration
 suite (`test/integration.test.ts`) passes all 12 acceptance criteria against a real
 sandbox on Windows (with `SHELL_MCP_IT_ALLOW_STOP=1`; see spike-results.md). The
-manual client check passed for GitHub Copilot (see [Client timeouts](#client-timeouts)); Claude Code is still to do. Behaviors that depend on the real
+manual client check passed for GitHub Copilot and Claude Code (see [Client timeouts](#client-timeouts)). Behaviors that depend on the real
 SDK are listed under [Limitations](#limitations). Linux and macOS hosts are
 deferred; see [ROADMAP.md](ROADMAP.md).
 
