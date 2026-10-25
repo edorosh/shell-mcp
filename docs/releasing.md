@@ -11,12 +11,9 @@ OIDC.
 npm cannot configure trusted publishing before the package exists, so 1.0.0 is
 published by hand and CI publishes every later release.
 
-1. Publish 1.0.0 by hand:
-   - Make a fresh clone checked out at the `v1.0.0` tag (or run
-     `git clean -xdf` in a clean checkout of it), so no stale gitignored
-     `dist/` is packed.
-   - Edit the `CHANGELOG.md` heading to `## [1.0.0] - YYYY-MM-DD` with the
-     release date, if it has none yet.
+1. Publish 1.0.0 by hand, after the release PR is merged:
+   - Make a fresh clone of `main` (so no stale gitignored `dist/` is packed)
+     and tag it locally: `git tag v1.0.0`. Don't push the tag yet.
    - `npm ci`
    - `npm test`
    - `node scripts/check-pack.mjs`
