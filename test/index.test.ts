@@ -1,4 +1,4 @@
-import { execFileSync, spawn } from "node:child_process";
+import { execSync, spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 import { beforeAll, describe, expect, it } from "vitest";
 
@@ -31,7 +31,7 @@ function runNode(args: string[], input?: string, waitFor?: (out: string) => bool
 
 describe("entry point", () => {
   beforeAll(() => {
-    execFileSync("npm", ["run", "build"], { stdio: "ignore", shell: process.platform === "win32" });
+    execSync("npm run build", { stdio: "ignore" });
   }, 120_000);
 
   it("exits 1 with a config error on stderr and nothing on stdout", async () => {

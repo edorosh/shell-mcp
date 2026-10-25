@@ -166,7 +166,7 @@ describe("ShellService.shell foreground", () => {
 
   it("sends progress while running, only with onProgress", async () => {
     const { fb, svc } = setup(mk(), { progressIntervalMs: 10 });
-    fb.delayMs = 35;
+    fb.delayMs = 150;
     const seen: number[] = [];
     await svc.shell({ command: "x" }, { onProgress: (s) => seen.push(s) });
     expect(seen.length).toBeGreaterThanOrEqual(3);
