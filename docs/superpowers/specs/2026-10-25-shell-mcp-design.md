@@ -9,7 +9,7 @@ how v1 is built. Requirement IDs (S1, P4, ...) refer to the spec.
 
 | Area | Decision | Who decided |
 |------|----------|-------------|
-| Language | TypeScript on Node.js (current LTS, ≥ 20) | User |
+| Language | TypeScript on Node.js (≥ 22, the `microsandbox` SDK's `engines` floor) | User |
 | MCP | Official `@modelcontextprotocol/sdk`, stdio transport | Claude's call |
 | Backend access | microsandbox TypeScript SDK (`microsandbox` on npm), **not** the `msb` CLI and **not** SSH | User asked to double-check; agreed after comparison |
 | Execution primitive | Native `exec` (stream variant) and managed jobs (`execDetached`) | Claude's call, from docs |
@@ -19,7 +19,7 @@ how v1 is built. Requirement IDs (S1, P4, ...) refer to the spec.
 | Parallel calls | Run concurrently, last finisher sets cwd | Claude's call |
 | Cancellation | Client cancel kills the sandbox process | Claude's call |
 | Shell | Configured shell only, no `sh` fallback | Claude's call |
-| Packaging | npm package with a `bin`, run via `npx` | Claude's call |
+| Packaging | Unpublished in v1; clients run `node <clone>\dist\index.js`. The unscoped npm name `shell-mcp` belongs to an unrelated package, so `npx shell-mcp` must never appear. A later publish uses a scope the user owns | Claude's call |
 | Config | CLI flags, each with an env-var fallback | Claude's call |
 
 Why the SDK over the CLI: passing arbitrary agent commands through
@@ -55,7 +55,7 @@ so Windows quoting is limited to one argument.
 
 ```
 shell-mcp/
-  package.json            bin: { "shell-mcp": "dist/index.js" }
+  package.json            bin: { "shell-mcp": "dist/index.js" }, private: true
   tsconfig.json
   src/
     index.ts              entry: parse config, build server, connect stdio
@@ -98,10 +98,13 @@ Example `.mcp.json` (Claude Code):
 
 ```json
 { "mcpServers": { "sandbox": {
-  "command": "npx", "args": ["-y", "shell-mcp",
+  "command": "node", "args": ["C:\\Users\\eugen\\dev\\shell-mcp\\dist\\index.js",
     "--sandbox", "myproj", "--host-root", "C:\\Users\\eugen\\dev\\myproj",
     "--guest-root", "/workspace"] } } }
 ```
+
+`node` needs no wrapper. If the server is ever launched via `npx` on native
+Windows, Claude Code needs `"command": "cmd", "args": ["/c", "npx", …]`.
 
 ## 5. Backend interface
 
@@ -129,22 +132,38 @@ tool layer maps the kind to the wording spec E3 requires.
 
 - **Connection:** lazy and cached. On first use, `Sandbox.get(name)`. If the
   status isn't running, throw `not_running` with the hint
-  `msb start <name>`. Otherwise `handle.connect()` (10 s timeout). On any
+  `msb start <name>`. Otherwise `handle.connectWithTimeout(10_000)`. On any
   connection-class error, drop the cache so the next call reconnects (E4).
 - **run:** `sb.execStreamWith(shell, b => b.args(["-c", script]).timeout(timeoutMs).stdinNull())`.
-  Iterate events, appending stdout/stderr chunks to one buffer in arrival
-  order and capping the in-memory buffer at about 4 × `max-output` (keep
-  the head and a rolling tail). An `exited` event gives the code.
+  Iterate events (not `collect()`, which rejects on timeout and loses the
+  output). Decode stdout and stderr with **separate** streaming UTF-8
+  decoders, so a multi-byte character split across chunks isn't corrupted
+  by a chunk from the other stream, then append the decoded text to one
+  buffer in arrival order. Cap the in-memory buffer at about 4 × `max-output`
+  (keep the head and a rolling tail) and report the characters dropped from
+  the middle, so the truncation marker's count stays exact. An `exited`
+  event gives the code.
   `ExecTimeoutError`, or the SDK's timeout signal, sets `timedOut`.
 - **startJob:** `sb.execDetachedWith(shell, b => b.args(["-c", script]).stdinNull())`,
   returning `job.id`.
 - **readJob:** `sb.getJob(id).logs({ fromCursor })`. (Note: the SDK never
-  receives a `cwd()` option; see §6.) Concatenate entry text and
-  return the last entry's cursor. A retention gap sets `gap` (surfaced as
-  "[some output was discarded by the sandbox]").
+  receives a `cwd()` option; see §6.) Entry `data` is a `Buffer`, so decode
+  through a per-job streaming UTF-8 decoder (a character can be split across
+  entries), and return the last entry's cursor. A retention gap sets `gap`
+  (surfaced as "[some output was discarded by the sandbox]"), but only if
+  the spike shows gaps are detectable: `JobLogEntry` has no gap field, and
+  gaps surface only as attach/`recv` events. Otherwise `gap` is always false
+  and the README lists it as a limitation.
 - **jobStatus / killJob:** `job.inspect()`; `job.kill()` then `job.wait()`
   raced against `waitMs` (default 3 s). microsandbox has no `killed` state;
   the tool layer reports `killed` only for jobs this instance killed (O2).
+  SDK states map as `starting`/`running` → running, `exited` → exited,
+  `failed` → exited with the launch error, `lost` → lost, other → unknown.
+  If the job exits between the status check and `kill()`, the resulting
+  `JobError` is treated as "already exited" and the real status is returned.
+- **Process groups:** agentd starts each command in its own session
+  (`setsid`) and kills with `kill(-pid)`, so timeout and kill should take
+  child processes with them (S5, K1). The spike confirms this with `pgrep`.
 - **listJobs:** not needed from the backend. `shell_list` reads the
   in-memory `JobRegistry` and asks `jobStatus` per entry (L1/L2).
 
@@ -164,8 +183,9 @@ trap 'printf "\n%s%s\n" "__SHELLMCP_CWD_<nonce>__" "$PWD" >&2' EXIT
 - The user's command is appended verbatim on its own line. Using a separate
   line, not `;`, keeps a trailing `#` comment or here-doc in the command
   from breaking the wrapper.
-- After the run, the server finds the **last** marker line in the output,
-  takes the path, and strips the marker line and the reset line (W5). No
+- After the run, the server finds the **last** marker line anywhere in the
+  output (the marker goes to stderr, so stdout can arrive after it), takes
+  the path, and strips the marker line and the reset line (W5). No
   marker (because of `exec` or a stderr redirect) means `cwd` stays
   unchanged (W2). A reset line means the result says "directory no longer
   existed; reset to workspace root" (W3).
@@ -182,8 +202,10 @@ trap 'printf "\n%s%s\n" "__SHELLMCP_CWD_<nonce>__" "$PWD" >&2' EXIT
 
 `PathMapper` is built from `hostRoot`, `guestRoot`, and `process.platform`:
 
-- `toGuest(hostPath)` and `toHost(guestPath)` per P2/P3. On Windows, host
-  comparison is case-insensitive and accepts both `\` and `/`.
+- `toHost(guestPath)` per P3. There is no `toGuest` in v1: commands are
+  never rewritten (P5), and nothing else maps host → guest. P1's Windows
+  rule (case-insensitive, both `\` and `/`) applies when host-side
+  comparison is added.
 - `rewriteOutput(text)`: a regex anchored on the escaped guest root, preceded
   by start-of-line or one of ``\s"'`(=:[,`` and followed by `/`, a
   delimiter, or end of text. The match is extended over path characters
