@@ -134,14 +134,24 @@ terminal tools so the agent can only run commands through shell-mcp.
 
 ## Client timeouts
 
-TODO after manual check on the host.
+**GitHub Copilot (VS Code), checked on Windows on 2026-10-25:** foreground calls
+up to the 600 s `max-timeout` were not cut off by the client. A `sleep 300` call
+and a `sleep 540` call (`timeout_ms: 600000`) both completed and returned their
+output. No client setting was changed. Copilot showed no progress indication while
+waiting. Background jobs, `shell_output`, `shell_kill` and `shell_list` worked
+as expected, including a `sleep 700` job that was killed with its process gone.
 
-Open question: does a 10-minute foreground call (`timeout_ms: 600000`) or a
-background `sleep 700` probe get cut off by the client's own MCP tool timeout
-(Claude Code: `MCP_TOOL_TIMEOUT`; Copilot: its own limit)? If so, what value of
-`MCP_TOOL_TIMEOUT` is needed, and do progress notifications reset it? This
-section will be filled in with the observed result. Until then, nothing is
-promised about long-running calls.
+**Claude Code:** not checked yet. Claude Code's MCP tool timeout is set with the
+`MCP_TOOL_TIMEOUT` environment variable (milliseconds). If long calls are cut
+off, raise it above your `max-timeout`.
+
+**Leave headroom under the timeout.** In the sandbox, `sleep` ran about 3% longer
+than requested (90 s took 93 s, 300 s took 310 s, 540 s took 556 s), so
+`sleep 590` with `timeout_ms: 600000` hit shell-mcp's own 600 s deadline. That
+result is shell-mcp's `timed out after 600s (process killed)`, not a client
+error. Give foreground commands a few percent of slack, or run anything long in
+the background. To allow longer foreground calls, raise `--max-timeout` (for
+example `--max-timeout 15m`), but no client has been checked beyond 600 s.
 
 ## Verify
 
@@ -237,7 +247,7 @@ The microsandbox SDK spike (`spike/`) has been run on Windows (results in
 [spike-results.md](docs/superpowers/specs/spike-results.md)). The integration
 suite (`test/integration.test.ts`) passes all 12 acceptance criteria against a real
 sandbox on Windows (with `SHELL_MCP_IT_ALLOW_STOP=1`; see spike-results.md). The
-manual Claude Code / Copilot check is still to do. Behaviors that depend on the real
+manual client check passed for GitHub Copilot (see [Client timeouts](#client-timeouts)); Claude Code is still to do. Behaviors that depend on the real
 SDK are listed under [Limitations](#limitations). Linux and macOS hosts are
 deferred; see [ROADMAP.md](ROADMAP.md).
 
