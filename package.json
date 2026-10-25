@@ -1,12 +1,25 @@
 {
-  "name": "shell-mcp",
-  "version": "0.1.0",
+  "name": "@edorosh/shell-mcp",
+  "version": "1.0.0",
   "description": "MCP server running shell commands inside a microsandbox",
-  "directories": {
-    "doc": "docs"
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/edorosh/shell-mcp.git"
   },
+  "homepage": "https://github.com/edorosh/shell-mcp#readme",
+  "bugs": "https://github.com/edorosh/shell-mcp/issues",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "sandbox",
+    "microsandbox",
+    "shell",
+    "windows"
+  ],
   "scripts": {
     "build": "tsc",
+    "prepack": "npm run build",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
@@ -20,14 +33,17 @@
     "typescript": "^7.0.2",
     "vitest": "^5.0.5"
   },
-  "private": true,
   "type": "module",
   "bin": {
     "shell-mcp": "dist/index.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "CHANGELOG.md"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "engines": {
     "node": ">=22"
   }
