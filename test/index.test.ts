@@ -44,6 +44,12 @@ describe("entry point", () => {
     expect(r.stdout).toBe("");
   });
 
+  it("--check against a nonexistent sandbox exits 1 with a FAIL line on stdout", async () => {
+    const r = await runNode(["--check", "--sandbox", "no-such-sandbox-shell-mcp-test", "--host-root", tmpdir(), "--guest-root", "/workspace"]);
+    expect(r.code).toBe(1);
+    expect(r.stdout).toMatch(/^FAIL/m);
+  });
+
   it("serves the four tools without contacting the sandbox", async () => {
     const msgs = [
       { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "t", version: "0" } } },

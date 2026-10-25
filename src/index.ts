@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 import { readFileSync } from "node:fs";
+import { readdir } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { runCheck } from "./check.js";
 import { ConfigError, parseCli } from "./config.js";
 import { checkRuntime, runtimeLogLine } from "./runtime.js";
 import { ShellService } from "./service.js";
@@ -49,9 +51,20 @@ async function main(): Promise<void> {
     return;
   }
   if (cli.mode === "check") {
-    // Placeholder until the check mode lands.
-    log("--check is not implemented yet");
-    process.exit(1);
+    const cfg = cli.config;
+    // Importing the backend module does not load the native module; the check's native step does.
+    const { MicrosandboxBackend } = await import("./backend/microsandbox.js");
+    const code = await runCheck(
+      cfg,
+      {
+        loadSdk: () => import("microsandbox"),
+        backend: new MicrosandboxBackend(cfg.sandbox, cfg.shell, cfg.maxOutput),
+        runtime: () => checkRuntime(v.sdk),
+        readdir: (p) => readdir(p),
+      },
+      (line) => process.stdout.write(`${line}\n`),
+    );
+    process.exit(code);
   }
   const cfg = cli.config;
   log(`version ${v.self}, microsandbox SDK ${v.sdk}, sandbox "${cfg.sandbox}"`);
