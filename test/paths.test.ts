@@ -14,6 +14,22 @@ describe("toHost", () => {
     expect(win.toHost("/tmp")).toBeNull();
     expect(win.toHost("/workspace/../tmp")).toBeNull();
   });
+  it("rejects backslash traversal and drive segments on win32", () => {
+    expect(win.toHost("/workspace/..\\..\\Windows")).toBeNull();
+    expect(win.toHost("/workspace/C:")).toBeNull();
+    expect(win.toHost("/workspace/a\\b")).toBeNull();
+  });
+  it("uses one form for a lowercase forward-slash host root", () => {
+    const m = new PathMapper("c:/Users/e/proj", "/workspace", "win32");
+    expect(m.toHost("/workspace")).toBe("c:\\Users\\e\\proj");
+    expect(m.toHost("/workspace/x")).toBe("c:\\Users\\e\\proj\\x");
+  });
+  it("handles guest root /", () => {
+    const m = new PathMapper("C:\\p", "/", "win32");
+    expect(m.toHost("/")).toBe("C:\\p");
+    expect(m.toHost("/a/b")).toBe("C:\\p\\a\\b");
+    expect(() => m.rewriteOutput("x /a y")).not.toThrow();
+  });
   it("maps on linux", () => {
     expect(lin.toHost("/workspace/src")).toBe("/home/e/proj/src");
   });
