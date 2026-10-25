@@ -190,6 +190,20 @@ describe("MicrosandboxBackend connection", () => {
     expect(calls.connect).toBe(2);
   });
 
+  it("maps a connect error with an unrecognized code (stopped sandbox: agent pipe missing) to unreachable", async () => {
+    const msg = "[AgentClient] agent client error: connect \\\\.\\pipe\\msb-agent-1: file not found (os error 2)";
+    const { be } = setup({ connectError: new SdkErr("agentClient", msg) });
+    const err = await be.run("x", { timeoutMs: 1 }).catch((e) => e);
+    expect(err).toBeInstanceOf(BackendError);
+    expect(err.kind).toBe("unreachable");
+    expect(err.message).toContain("agent client error");
+  });
+
+  it("maps a lookup error with an unrecognized code to unreachable", async () => {
+    const { be } = setup({ getError: new SdkErr("runtimeNotInstalled", "msb runtime not found") });
+    expect(await kindOf(be.run("x", { timeoutMs: 1 }))).toBe("unreachable");
+  });
+
   it("maps an SDK load failure to unreachable", async () => {
     const be = new MicrosandboxBackend("proj", "bash", 1000, {
       loadSdk: async () => {

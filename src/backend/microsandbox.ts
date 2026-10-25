@@ -389,7 +389,7 @@ export class MicrosandboxBackend implements Backend {
     try {
       handle = await sdk.Sandbox.get(this.sandboxName);
     } catch (e) {
-      throw this.fail(e, "before");
+      throw this.cannotReach(e);
     }
     if (handle.status !== "running") {
       throw new BackendError("not_running", `sandbox "${this.sandboxName}" is ${handle.status}`);
@@ -397,8 +397,19 @@ export class MicrosandboxBackend implements Backend {
     try {
       return await handle.connectWithTimeout(10_000);
     } catch (e) {
-      throw this.fail(e, "before");
+      throw this.cannotReach(e);
     }
+  }
+
+  /**
+   * Any failure while looking up or connecting to the sandbox means we could not reach it: the
+   * SDK's error for a stopped sandbox ("[AgentClient] agent client error: connect \\.\pipe\msb-agent-…")
+   * carries no code we can match, so only not_found and not_running keep their own kind and the rest
+   * become `unreachable`, whose message names the sandbox and how to start it.
+   */
+  private cannotReach(e: unknown): BackendError {
+    const be = this.fail(e, "before");
+    return be.kind === "not_found" || be.kind === "not_running" ? be : new BackendError("unreachable", be.message);
   }
 
   /**

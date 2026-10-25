@@ -239,5 +239,5 @@ describe.skipIf(!ENABLED)("acceptance criteria (section 13)", () => {
     expect(body(r.text).trim()).toBe(guestBase.replace(/\/+$/, "") || "/");
     expect(cwdLine(r.text)).toBe(`cwd: ${hostRoot}`);
     expect(r.text).toContain("previous directory no longer existed; ran in workspace root");
-  });
+  }, 60_000);
 });

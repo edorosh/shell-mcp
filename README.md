@@ -167,7 +167,7 @@ the sandbox is running and reachable.
   SDK is pinned to 0.7.11 for that reason.
 - The sandbox sees host-side changes to the mounted folder with a short delay. Right
   after a host-side delete of the current directory the guest may still resolve it
-  (observed: still visible immediately, gone within 5 s), so the next call runs there
+  (measured: still visible right after, gone after about 5 s), so the next call runs there
   instead of resetting to the workspace root; later calls reset normally.
 - Parallel calls run concurrently; the last to finish sets the working directory.
 - A command killed by a signal other than the timeout (for example `kill -9 $$`,
