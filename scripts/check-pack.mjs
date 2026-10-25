@@ -55,10 +55,11 @@ try {
   const packed = runOk("npm", ["pack", "--json", "--pack-destination", packDir], repo);
   let info;
   try {
-    info = JSON.parse(packed.stdout)[0];
-  } catch {
-    fail(`npm pack --json gave unparseable output:\n${packed.stdout}`);
-  }
+    // npm 10/11 print an array of results; npm 12 prints an object keyed by package name.
+    const parsed = JSON.parse(packed.stdout);
+    info = Array.isArray(parsed) ? parsed[0] : Object.values(parsed)[0];
+  } catch {}
+  if (!info?.files) fail(`npm pack --json gave unexpected output:\n${packed.stdout}`);
   const paths = info.files.map((f) => f.path.replaceAll("\\", "/"));
 
   const required = ["package.json", "README.md", "LICENSE", "CHANGELOG.md", "dist/index.js"];
