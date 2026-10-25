@@ -92,6 +92,14 @@ export class ShellService {
   async output(args: { job_id: string }): Promise<ToolResult> {
     const rec = this.jobs.get(args.job_id);
     if (!rec) return this.unknownJob(args.job_id);
+    // The cursor and the pending buffer are per-job state, so overlapping calls queue up:
+    // two concurrent reads from the same cursor would replay output or move the cursor back.
+    const run = rec.readLock.then(() => this.readOutput(rec));
+    rec.readLock = run.catch(() => undefined);
+    return run;
+  }
+
+  private async readOutput(rec: JobRecord): Promise<ToolResult> {
     try {
       // Status first, then the log: a job that exits between the two calls still has its last
       // output in this read, so an "exited" status never comes without the tail.

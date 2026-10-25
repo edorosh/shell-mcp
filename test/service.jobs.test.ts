@@ -68,6 +68,27 @@ describe("output", () => {
     expect(fb.readCalls.map((c) => c.cursor)).toEqual([undefined, "c1", "c1"]);
   });
 
+  it("serializes overlapping reads of the same job", async () => {
+    // A log that is read from a cursor and answers slowly, like a real backend.
+    const lines = ["a\n", "b\n", "c\n", "d\n"];
+    class SlowLog extends FakeBackend {
+      override async readJob(id: string, cursor?: string) {
+        this.readCalls.push({ id, cursor });
+        const from = cursor === undefined ? 0 : Number(cursor);
+        await new Promise((r) => setTimeout(r, 20));
+        const text = lines.slice(from, from + 2).join("");
+        return { text, cursor: String(Math.min(lines.length, from + 2)), gap: false };
+      }
+    }
+    const fb = new SlowLog();
+    const svc = new ShellService(mk(), fb, { nonce: "n" });
+    svc.jobs.add("job1", "tail -f log");
+    const [r1, r2] = await Promise.all([svc.output({ job_id: "job1" }), svc.output({ job_id: "job1" })]);
+    const body = (t: string) => t.split("\n---\n")[1]!;
+    expect(body(r1.text) + body(r2.text)).toBe("a\nb\nc\nd\n");
+    expect(fb.readCalls.map((c) => c.cursor)).toEqual([undefined, "2"]);
+  });
+
   it("pages astral text with max-output 1 to completion", async () => {
     const { fb, svc } = setup(mk(["--max-output", "1"]));
     const big = "😀😀x😀";

@@ -5,6 +5,8 @@ export interface JobRecord {
   cursor?: string;
   pending: string;
   killedByUs: boolean;
+  /** Tail of the shell_output queue: reads of one job's log run one at a time. */
+  readLock: Promise<unknown>;
 }
 
 export class JobRegistry {
@@ -13,7 +15,7 @@ export class JobRegistry {
   constructor(private readonly now: () => Date = () => new Date()) {}
 
   add(id: string, command: string): JobRecord {
-    const rec: JobRecord = { id, command, startedAt: this.now(), pending: "", killedByUs: false };
+    const rec: JobRecord = { id, command, startedAt: this.now(), pending: "", killedByUs: false, readLock: Promise.resolve() };
     this.jobs.set(id, rec);
     return rec;
   }
