@@ -94,7 +94,9 @@ export function parseConfig(
   const maxOutput = mo === undefined ? 30000 : parseIntSetting("max-output", mo);
 
   const flagRewrite = (values as Record<string, boolean | undefined>)["rewrite-output-paths"];
-  const rewriteOutputPaths = flagRewrite ?? env.SHELL_MCP_REWRITE_OUTPUT_PATHS !== "0";
+  // Only 0 / false / no (any case) disable rewriting via the environment; anything else keeps it on.
+  const envRewrite = env.SHELL_MCP_REWRITE_OUTPUT_PATHS;
+  const rewriteOutputPaths = flagRewrite ?? !(envRewrite !== undefined && /^(0|false|no)$/i.test(envRewrite.trim()));
 
   return {
     sandbox, hostRoot, guestRoot, defaultTimeoutMs, maxTimeoutMs, maxOutput,

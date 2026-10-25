@@ -34,6 +34,13 @@ describe("parseConfig", () => {
   it("disables path rewriting", () => {
     expect(parseConfig([...base, "--no-rewrite-output-paths"], {}, yes).rewriteOutputPaths).toBe(false);
     expect(parseConfig(base, { SHELL_MCP_REWRITE_OUTPUT_PATHS: "0" }, yes).rewriteOutputPaths).toBe(false);
+    for (const v of ["false", "FALSE", "no", "No", " 0 "]) {
+      expect(parseConfig(base, { SHELL_MCP_REWRITE_OUTPUT_PATHS: v }, yes).rewriteOutputPaths).toBe(false);
+    }
+    for (const v of ["1", "true", "yes", "", "off"]) {
+      expect(parseConfig(base, { SHELL_MCP_REWRITE_OUTPUT_PATHS: v }, yes).rewriteOutputPaths).toBe(true);
+    }
+    expect(parseConfig([...base, "--rewrite-output-paths"], { SHELL_MCP_REWRITE_OUTPUT_PATHS: "0" }, yes).rewriteOutputPaths).toBe(true);
   });
   it("normalizes windows host roots", () => {
     const w = { platform: "win32" as const, exists: () => true };

@@ -14,6 +14,7 @@ export function describeTools(cfg: Config): {
       `The host directory ${cfg.hostRoot} is mounted in the sandbox at ${cfg.guestRoot}; the command starts in ${cfg.guestRoot} ` +
       `and only files under that directory are shared with the host. ` +
       `The working directory persists between calls, but environment variables and shell state (aliases, functions) do not. ` +
+      `Do not rely on cd across parallel calls: each starts in the directory current when it starts, and the last to finish sets it. ` +
       `Default timeout is ${def} seconds, maximum ${max} seconds (timeout_ms). ` +
       `Use run_in_background for servers and other long-running processes; it returns a job id to use with shell_output, shell_kill and shell_list. ` +
       `Interactive programs (editors, pagers, prompts waiting for input) are not supported. ` +

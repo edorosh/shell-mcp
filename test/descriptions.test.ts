@@ -12,7 +12,7 @@ describe("describeTools", () => {
   const d = describeTools(cfg).shell;
   it.each([
     "Linux sandbox", "C:\\Users\\e\\proj", "/workspace", "bash", "120", "600",
-    "run_in_background", "environment", "Interactive programs", "file tools with host paths",
+    "run_in_background", "environment", "Interactive programs", "file tools with host paths", "parallel calls",
   ])("shell description mentions %s", (s) => {
     expect(d).toContain(s);
   });
