@@ -9,75 +9,73 @@ commands with a timeout), `shell_output`, `shell_kill` and `shell_list`. Paths
 are translated between the host project folder and the sandbox mount, and the
 working directory is tracked across calls.
 
-v1, Windows hosts only, not published to npm; see [Status](#status).
+Published on npm as [`@edorosh/shell-mcp`](https://www.npmjs.com/package/@edorosh/shell-mcp).
+Windows hosts only; see [Status](#status).
 
 ## Requirements
 
-- Windows host.
+- Windows host (x64 or arm64).
 - Node.js 22 or newer.
-- The `msb` runtime at the version matching the pinned SDK. This repo pins
-  `microsandbox` (npm SDK) at exactly **0.7.11**. The SDK and `msb` must match;
-  the tested pair is **`microsandbox` 0.7.11 with `msb` 0.7.11** on Windows (see
-  [spike-results.md](docs/superpowers/specs/spike-results.md)). At startup the server logs
-  its own and the SDK version to stderr.
-- A sandbox you have already created (shell-mcp never creates or starts one).
-- `bash` installed in the sandbox image. The configured shell (default `bash`)
-  is the only shell used, with no `sh` fallback.
+- A sandbox you have already created (shell-mcp never creates or starts one),
+  with `bash` installed in its image. The configured shell (default `bash`) is
+  the only shell used, with no `sh` fallback.
+- A microsandbox runtime (`msb`) at the version matching the pinned SDK.
+  `@edorosh/shell-mcp` 1.0.0 pins `microsandbox` (npm SDK) at exactly
+  **0.7.11**; the tested pair is `microsandbox` 0.7.11 with `msb` 0.7.11 on
+  Windows (see [spike-results.md](docs/superpowers/specs/spike-results.md)).
+  shell-mcp uses the `msb` in your microsandbox home if you have one, and the
+  runtime packaged with the SDK otherwise. A version mismatch is logged to
+  stderr at startup and reported by `--check`; it never stops the server.
 
 ## Install
 
-shell-mcp is not published. Clone this repository and build it:
+Nothing to clone or build. Warm the npx cache and confirm the package runs:
 
 ```powershell
-# clone this repository to C:\Users\eugen\dev\shell-mcp, then:
-cd C:\Users\eugen\dev\shell-mcp
-npm ci
-npm run build
+npx -y @edorosh/shell-mcp@1.0.0 --version
 ```
 
-The server is then `node <clone>\dist\index.js`, for example
-`node C:\Users\eugen\dev\shell-mcp\dist\index.js`.
+**Do not use `npx shell-mcp`.** The npm name `shell-mcp` belongs to an unrelated
+package; always use the scoped name `@edorosh/shell-mcp` with a version.
 
-**Do not use `npx shell-mcp`.** The npm name `shell-mcp` belongs to an unrelated package.
+The client configs below run `npx -y @edorosh/shell-mcp@1.0.0 ...`. That form
+contacts the npm registry on every start, so it does not start offline. To
+start offline and instantly, use the [global install](#global-install).
 
 ## Creating a sandbox
 
-Create a sandbox with your project folder mounted, using an image that contains
-`bash`:
+A sandbox belongs to the `msb` runtime home that created it, so create it with
+the same `msb` that shell-mcp will use. Use an image that contains `bash`, for
+example `ubuntu:24.04`.
+
+**You already have a separate `msb` install** (the `msb` in your microsandbox
+home; shell-mcp uses it). Create the sandbox as usual. Its version must match
+the SDK (0.7.11 for shell-mcp 1.0.0); `--check` verifies this.
 
 ```powershell
-msb create <image> --name myproj --mount-dir C:\Users\eugen\dev\myproj:/workspace
+msb create ubuntu:24.04 --name myproj --mount-dir C:\Users\eugen\dev\myproj:/workspace
 ```
 
-Then make sure it is running (`msb start myproj`, if `create` did not start it).
+**You have no `msb` installed.** Use the runtime packaged with the SDK:
+
+```powershell
+npx -y -p microsandbox@0.7.11 msb create ubuntu:24.04 --name myproj --mount-dir C:\Users\eugen\dev\myproj:/workspace
+```
+
+`create` also starts the sandbox. If it is stopped later, start it with
+`msb start myproj` (or the same `npx -y -p microsandbox@0.7.11 msb start myproj`);
+until then `shell` returns a tool error, and the next call works once it runs.
 The values to give shell-mcp are the sandbox name (`myproj`), the host folder
-(`C:\Users\eugen\dev\myproj`) and the guest path (`/workspace`). If the
-sandbox is stopped, `shell` returns a tool error; start it and the next call
-works.
+(`C:\Users\eugen\dev\myproj`) and the guest path (`/workspace`).
 
-## Configuration
+## Check
 
-Flags win over environment variables.
+Run shell-mcp once with `--check` before configuring a client. It verifies the
+native module, the runtime version and that the sandbox is reachable:
 
-| Flag | Env | Default |
-|------|-----|---------|
-| `--sandbox` | `SHELL_MCP_SANDBOX` | required |
-| `--host-root` | `SHELL_MCP_HOST_ROOT` | required |
-| `--guest-root` | `SHELL_MCP_GUEST_ROOT` | required |
-| `--default-timeout` | `SHELL_MCP_DEFAULT_TIMEOUT` | `120s` |
-| `--max-timeout` | `SHELL_MCP_MAX_TIMEOUT` | `600s` |
-| `--max-output` | `SHELL_MCP_MAX_OUTPUT` | `30000` |
-| `--no-rewrite-output-paths` | `SHELL_MCP_REWRITE_OUTPUT_PATHS=0` (or `false`, `no`) | rewriting on |
-| `--shell` | `SHELL_MCP_SHELL` | `bash` |
-
-`--host-root` must be an absolute path. It is normalized (`path.win32.normalize`:
-`/` becomes `\`, `.` and `..` segments are collapsed), a trailing separator is
-stripped, and it must exist on disk. The guest root must be an absolute POSIX
-path; a trailing `/` is stripped.
-
-Path rewriting is turned off only by `--no-rewrite-output-paths` or by
-`SHELL_MCP_REWRITE_OUTPUT_PATHS` set to `0`, `false` or `no` (any case). Any
-other value leaves it on; the flag wins over the variable.
+```powershell
+npx -y @edorosh/shell-mcp@1.0.0 --sandbox myproj --host-root C:\Users\eugen\dev\myproj --guest-root /workspace --check
+```
 
 ## Claude Code
 
@@ -87,9 +85,9 @@ Put `.mcp.json` in your project (example: [examples/claude/.mcp.json](examples/c
 {
   "mcpServers": {
     "sandbox": {
-      "command": "node",
+      "command": "cmd",
       "args": [
-        "C:\\Users\\eugen\\dev\\shell-mcp\\dist\\index.js",
+        "/c", "npx", "-y", "@edorosh/shell-mcp@1.0.0",
         "--sandbox", "myproj",
         "--host-root", "C:\\Users\\eugen\\dev\\myproj",
         "--guest-root", "/workspace"
@@ -98,6 +96,17 @@ Put `.mcp.json` in your project (example: [examples/claude/.mcp.json](examples/c
   }
 }
 ```
+
+Or add it from the command line:
+
+```powershell
+claude mcp add sandbox --scope project -- cmd /c npx -y @edorosh/shell-mcp@1.0.0 --sandbox myproj --host-root C:\Users\eugen\dev\myproj --guest-root /workspace
+```
+
+`cmd /c` is what the Claude Code docs prescribe for `npx` on native Windows.
+Bare `npx` (and `shell-mcp` after a global install) also start in current
+Claude Code, and VS Code's newer agent host also reads the project `.mcp.json`,
+so one file can serve both clients.
 
 Turn off Claude Code's built-in shell so the agent can only run commands through
 shell-mcp, in `.claude/settings.json` (example:
@@ -117,9 +126,9 @@ Put `.vscode/mcp.json` in your project (example:
   "servers": {
     "sandbox": {
       "type": "stdio",
-      "command": "node",
+      "command": "npx",
       "args": [
-        "C:\\Users\\eugen\\dev\\shell-mcp\\dist\\index.js",
+        "-y", "@edorosh/shell-mcp@1.0.0",
         "--sandbox", "myproj",
         "--host-root", "C:\\Users\\eugen\\dev\\myproj",
         "--guest-root", "/workspace"
@@ -128,6 +137,10 @@ Put `.vscode/mcp.json` in your project (example:
   }
 }
 ```
+
+Use a literal host path: VS Code does not substitute `${workspaceFolder}` in
+`args` (shell-mcp would get the literal string and exit with "host-root must be
+an absolute path").
 
 ### Turning off Copilot's built-in shell
 
@@ -176,23 +189,81 @@ script and read the log (in `deny-shell.sh`, add
 The Linux/macOS script is untested with Copilot; it was only checked against
 sample payloads from the command line.
 
-**Copilot CLI:** deny the built-in shell and allow the shell-mcp server per
-session (deny rules win over every allow rule, including `--allow-all-tools`):
+References: [VS Code: use tools with agents](https://code.visualstudio.com/docs/agents/agent-tools),
+[custom agents](https://code.visualstudio.com/docs/agent-customization/custom-agents),
+[approvals](https://code.visualstudio.com/docs/agents/run/approvals),
+[Copilot hooks reference](https://docs.github.com/en/copilot/reference/hooks-reference),
+[Copilot CLI: allowing tools](https://docs.github.com/en/copilot/how-tos/copilot-cli/use-copilot-cli/allowing-tools).
+
+## Copilot CLI
+
+Add the server with `/mcp add`, using the same command and arguments as the
+VS Code example (`npx` with `-y @edorosh/shell-mcp@1.0.0 --sandbox ...`) and
+the name `/mcp` shows. The CLI does not read `.vscode/mcp.json`. To deny the
+built-in shell and allow shell-mcp per session (deny rules win over every allow
+rule, including `--allow-all-tools`):
 
 ```powershell
 copilot --deny-tool='shell' --allow-tool='sandbox'
 ```
 
 These flags are not saved to a config file, so put them in a wrapper script.
-The CLI does not read `.vscode/mcp.json`; add the server with `/mcp add` using
-the same command and arguments, and use the name `/mcp` shows. Unverified on
-Windows: whether the CLI's PowerShell tool is also covered by `shell`.
+Unverified on Windows: whether the CLI's PowerShell tool is also covered by
+`shell`.
 
-References: [VS Code: use tools with agents](https://code.visualstudio.com/docs/agents/agent-tools),
-[custom agents](https://code.visualstudio.com/docs/agent-customization/custom-agents),
-[approvals](https://code.visualstudio.com/docs/agents/run/approvals),
-[Copilot hooks reference](https://docs.github.com/en/copilot/reference/hooks-reference),
-[Copilot CLI: allowing tools](https://docs.github.com/en/copilot/how-tos/copilot-cli/use-copilot-cli/allowing-tools).
+## Upgrading
+
+Change the version in the client config (for example `@edorosh/shell-mcp@1.0.1`)
+and run `--check` with the new version. [CHANGELOG.md](CHANGELOG.md) lists the
+`msb` version each release expects; if it changed, recreate or update `msb` to
+match. Close running clients first (see
+[Troubleshooting](#access-denied-when-clearing-the-npx-cache-or-upgrading)).
+
+## Global install
+
+```powershell
+npm i -g @edorosh/shell-mcp@1.0.0
+```
+
+Then use `shell-mcp` as the command, with the same arguments as above and
+without `npx -y @edorosh/shell-mcp@1.0.0`: in `.vscode/mcp.json`
+`"command": "shell-mcp"`, and in Claude Code's `.mcp.json`
+`"command": "cmd", "args": ["/c", "shell-mcp", "--sandbox", ...]`. The global
+install starts instantly and works offline.
+
+## Configuration
+
+Flags win over environment variables.
+
+| Flag | Env | Default |
+|------|-----|---------|
+| `--sandbox` | `SHELL_MCP_SANDBOX` | required |
+| `--host-root` | `SHELL_MCP_HOST_ROOT` | required |
+| `--guest-root` | `SHELL_MCP_GUEST_ROOT` | required |
+| `--default-timeout` | `SHELL_MCP_DEFAULT_TIMEOUT` | `120s` |
+| `--max-timeout` | `SHELL_MCP_MAX_TIMEOUT` | `600s` |
+| `--max-output` | `SHELL_MCP_MAX_OUTPUT` | `30000` |
+| `--no-rewrite-output-paths` | `SHELL_MCP_REWRITE_OUTPUT_PATHS=0` (or `false`, `no`) | rewriting on |
+| `--shell` | `SHELL_MCP_SHELL` | `bash` |
+| `--version` | none | prints the version and exits |
+| `--help` | none | prints usage and exits |
+| `--check` | none | verifies native module, runtime version and sandbox, then exits |
+
+`--host-root` must be an absolute path. It is normalized (`path.win32.normalize`:
+`/` becomes `\`, `.` and `..` segments are collapsed), a trailing separator is
+stripped, and it must exist on disk. The guest root must be an absolute POSIX
+path; a trailing `/` is stripped.
+
+Path rewriting is turned off only by `--no-rewrite-output-paths` or by
+`SHELL_MCP_REWRITE_OUTPUT_PATHS` set to `0`, `false` or `no` (any case). Any
+other value leaves it on; the flag wins over the variable.
+
+## Verify
+
+Ask the agent to run `uname -a`. It should report Linux (the sandbox kernel).
+If it does not report Linux, the agent may still be using a built-in shell; if it fails, check that
+the sandbox is running and reachable.
+
 
 ## Client timeouts
 
@@ -221,16 +292,110 @@ error. Give foreground commands a few percent of slack, or run anything long in
 the background. To allow longer foreground calls, raise `--max-timeout` (for
 example `--max-timeout 15m`), but no client has been checked beyond 600 s.
 
-## Verify
-
-Ask the agent to run `uname -a`. It should report Linux (the sandbox kernel).
-If it does not report Linux, the agent may still be using a built-in shell; if it fails, check that
-the sandbox is running and reachable.
-
 ## Troubleshooting
 
-### `Unable to resolve @typescript/typescript-win32-x64` on `npm run build` or `npm run typecheck`
+### Native module failure in `--check` on Windows
 
+`npm config get os` must print nothing on Windows. An `os=linux` line in a
+user or project `.npmrc` makes npm fetch the Linux binaries, and `--check`
+reports it as a native-module failure. Fix it with:
+
+```powershell
+npm config delete os
+```
+
+Then re-run the `--check` command. If the Linux package is already cached,
+clear the npx cache (see the next entry) before retrying.
+
+### Access denied when clearing the npx cache or upgrading
+
+Deleting `%LOCALAPPDATA%\npm-cache\_npx`, or an upgrade that replaces it, fails with
+"access denied" on `microsandbox.win32-x64-msvc.node` while a client is
+running shell-mcp (Windows locks loaded DLLs). Close the clients first.
+
+## Limitations
+
+- No interactive programs: stdin is closed for every command.
+- Environment variables do not persist between calls (`export X=1` then
+  `echo $X` prints an empty line). The working directory does persist.
+- Background jobs are not listed after a server restart. Only jobs started by
+  the running server instance are visible and killable.
+- Output paths containing spaces are rewritten from guest to host only up to
+  the first space.
+- A user `trap ... EXIT` or `exec` in a command disables working-directory
+  tracking for that call; the working directory stays as it was.
+- A newline in a working-directory path is not supported.
+- Job-output retention gaps are detected only when a read follows a cursor. If
+  output was discarded before the first read of a job, that gap is not flagged.
+- The `microsandbox` SDK and the `msb` runtime must be the same version; the
+  SDK is pinned to 0.7.11 for that reason.
+- The sandbox sees host-side changes to the mounted folder with a short delay. Right
+  after a host-side delete of the current directory the guest may still resolve it
+  (measured: still visible right after, gone after about 5 s), so the next call runs there
+  instead of resetting to the workspace root; later calls reset normally.
+- Parallel calls run concurrently; the last to finish sets the working directory.
+- A command killed by a signal other than the timeout (for example `kill -9 $$`,
+  or the out-of-memory killer) reports exit code -1, not 128+N: the sandbox
+  does not pass the signal number through.
+- If the sandbox never confirms the exit after a timeout kill, the result still
+  says `timed out` and adds a note that the exit was not confirmed.
+- Timeout detection relies on the sandbox reporting exit code -1 when the SDK's
+  deadline kills the shell. The spike confirmed this on Windows with `msb` 0.7.11
+  (output produced before the deadline is kept and the process group dies).
+  shell-mcp's own kill half a second past the deadline is only a fallback.
+- Not yet verified on a real host: the `output_gap` and `launch_unconfirmed` error
+  paths.
+
+## Status
+
+The microsandbox SDK spike (`spike/`) has been run on Windows (results in
+[spike-results.md](docs/superpowers/specs/spike-results.md)). The integration
+suite (`test/integration.test.ts`) passes all 12 acceptance criteria against a real
+sandbox on Windows (with `SHELL_MCP_IT_ALLOW_STOP=1`; see spike-results.md). The
+manual client check passed for GitHub Copilot and Claude Code (see [Client timeouts](#client-timeouts)). Behaviors that depend on the real
+SDK are listed under [Limitations](#limitations). Linux and macOS hosts are
+deferred; see [ROADMAP.md](ROADMAP.md).
+
+## Development
+
+To work on shell-mcp itself, clone the repository and build it:
+
+```powershell
+cd C:\Users\eugen\dev\shell-mcp
+npm ci
+npm run build
+```
+
+The server is then `node C:\Users\eugen\dev\shell-mcp\dist\index.js`, with the same
+flags as above.
+
+To run the integration suite and the SDK spike, in PowerShell, with a running sandbox:
+
+```powershell
+# Integration suite (repo root)
+$env:SHELL_MCP_IT_SANDBOX="myproj"; $env:SHELL_MCP_IT_HOST_ROOT="C:\Users\eugen\dev\myproj"; $env:SHELL_MCP_IT_GUEST_ROOT="/workspace"; npx vitest run test/integration.test.ts
+```
+
+Expected: 12 pass, or 11 pass and 1 skipped.
+
+```powershell
+# SDK spike (see spike\README.md)
+mkdir C:\temp\spike-ws -Force
+msb create <image> --name spike --mount-dir C:\temp\spike-ws:/workspace
+msb start spike          # skip if create already starts it
+msb --version
+cd spike
+npm install
+node sdk-check.mjs spike *>&1 | Tee-Object -FilePath spike-output.txt
+
+# Optional: probe a stopped sandbox too
+msb create <image> --name spike-stopped
+msb stop spike-stopped
+$env:SPIKE_STOPPED = "spike-stopped"
+node sdk-check.mjs spike *>&1 | Tee-Object -FilePath spike-output.txt
+```
+
+### `Unable to resolve @typescript/typescript-win32-x64` on `npm run build` or `npm run typecheck`
 The project builds with TypeScript 7, which runs a compiler from a per-platform package
 (`@typescript/typescript-<os>-<cpu>`). The lockfile lists all of them, and npm installs only
 the one matching the machine. This error means `node_modules` contains a different platform's
@@ -276,71 +441,3 @@ The same wrong-platform install would also break the native `microsandbox` packa
 before running the spike or the integration suite. Do not install dependencies in a folder that
 a Linux sandbox shares with your Windows checkout; use a separate clone for each.
 
-## Limitations
-
-- No interactive programs: stdin is closed for every command.
-- Environment variables do not persist between calls (`export X=1` then
-  `echo $X` prints an empty line). The working directory does persist.
-- Background jobs are not listed after a server restart. Only jobs started by
-  the running server instance are visible and killable.
-- Output paths containing spaces are rewritten from guest to host only up to
-  the first space.
-- A user `trap ... EXIT` or `exec` in a command disables working-directory
-  tracking for that call; the working directory stays as it was.
-- A newline in a working-directory path is not supported.
-- Job-output retention gaps are detected only when a read follows a cursor. If
-  output was discarded before the first read of a job, that gap is not flagged.
-- The `microsandbox` SDK and the `msb` runtime must be the same version; the
-  SDK is pinned to 0.7.11 for that reason.
-- The sandbox sees host-side changes to the mounted folder with a short delay. Right
-  after a host-side delete of the current directory the guest may still resolve it
-  (measured: still visible right after, gone after about 5 s), so the next call runs there
-  instead of resetting to the workspace root; later calls reset normally.
-- Parallel calls run concurrently; the last to finish sets the working directory.
-- A command killed by a signal other than the timeout (for example `kill -9 $$`,
-  or the out-of-memory killer) reports exit code -1, not 128+N: the sandbox
-  does not pass the signal number through.
-- If the sandbox never confirms the exit after a timeout kill, the result still
-  says `timed out` and adds a note that the exit was not confirmed.
-- Timeout detection relies on the sandbox reporting exit code -1 when the SDK's
-  deadline kills the shell. The spike confirmed this on Windows with `msb` 0.7.11
-  (output produced before the deadline is kept and the process group dies).
-  shell-mcp's own kill half a second past the deadline is only a fallback.
-- Not yet verified on a real host: the `output_gap` and `launch_unconfirmed` error
-  paths.
-
-## Status
-
-The microsandbox SDK spike (`spike/`) has been run on Windows (results in
-[spike-results.md](docs/superpowers/specs/spike-results.md)). The integration
-suite (`test/integration.test.ts`) passes all 12 acceptance criteria against a real
-sandbox on Windows (with `SHELL_MCP_IT_ALLOW_STOP=1`; see spike-results.md). The
-manual client check passed for GitHub Copilot and Claude Code (see [Client timeouts](#client-timeouts)). Behaviors that depend on the real
-SDK are listed under [Limitations](#limitations). Linux and macOS hosts are
-deferred; see [ROADMAP.md](ROADMAP.md).
-
-To run them, in PowerShell, with a running sandbox:
-
-```powershell
-# Integration suite (repo root)
-$env:SHELL_MCP_IT_SANDBOX="myproj"; $env:SHELL_MCP_IT_HOST_ROOT="C:\Users\eugen\dev\myproj"; $env:SHELL_MCP_IT_GUEST_ROOT="/workspace"; npx vitest run test/integration.test.ts
-```
-
-Expected: 12 pass, or 11 pass and 1 skipped.
-
-```powershell
-# SDK spike (see spike\README.md)
-mkdir C:\temp\spike-ws -Force
-msb create <image> --name spike --mount-dir C:\temp\spike-ws:/workspace
-msb start spike          # skip if create already starts it
-msb --version
-cd spike
-npm install
-node sdk-check.mjs spike *>&1 | Tee-Object -FilePath spike-output.txt
-
-# Optional: probe a stopped sandbox too
-msb create <image> --name spike-stopped
-msb stop spike-stopped
-$env:SPIKE_STOPPED = "spike-stopped"
-node sdk-check.mjs spike *>&1 | Tee-Object -FilePath spike-output.txt
-```

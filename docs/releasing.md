@@ -8,19 +8,23 @@ OIDC.
 
 ## One-time setup
 
-1. On npmjs.com, open the package settings and add a trusted publisher:
-   GitHub Actions, repository `edorosh/shell-mcp`, workflow `release.yml`,
-   no environment.
-2. If npmjs.com lets you add the trusted publisher before the package exists,
-   do that and let CI publish 1.0.0 (see "Each release").
-3. Otherwise publish 1.0.0 by hand first, then configure the trusted
-   publisher as in step 1:
-   - Check out the tagged commit cleanly (`git status` shows nothing).
+npm cannot configure trusted publishing before the package exists, so 1.0.0 is
+published by hand and CI publishes every later release.
+
+1. Publish 1.0.0 by hand:
+   - Check out the `v1.0.0` tag cleanly (`git status` shows nothing).
    - `npm ci`
    - `npm login`
    - `npm publish`
 
    This version has no provenance. CI-published versions get it.
+2. Add the trusted publisher (GitHub Actions, repository `edorosh/shell-mcp`,
+   workflow `release.yml`, no environment), either:
+   - on npmjs.com: the package, Settings, Trusted publishing; or
+   - from the command line (npm 11.15.0 or newer, 2FA on):
+     `npm trust github @edorosh/shell-mcp --file release.yml --repo edorosh/shell-mcp --allow-publish`
+3. The first CI publish must happen within 2 days of adding the trusted
+   publisher, so cut the next release soon after.
 
 ## Each release
 

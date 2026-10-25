@@ -241,6 +241,8 @@ risk 4 confirms it):
 }
 ```
 
+(2026-10-25 spike: VS Code does not substitute `${workspaceFolder}` in args; the README uses a literal path.)
+
 Copilot CLI: `/mcp add` with the same command and args.
 
 README install flow, in order:

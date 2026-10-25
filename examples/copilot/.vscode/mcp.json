@@ -2,9 +2,9 @@
   "servers": {
     "sandbox": {
       "type": "stdio",
-      "command": "node",
+      "command": "npx",
       "args": [
-        "C:\\Users\\eugen\\dev\\shell-mcp\\dist\\index.js",
+        "-y", "@edorosh/shell-mcp@1.0.0",
         "--sandbox", "myproj",
         "--host-root", "C:\\Users\\eugen\\dev\\myproj",
         "--guest-root", "/workspace"
