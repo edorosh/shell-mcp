@@ -129,8 +129,70 @@ Put `.vscode/mcp.json` in your project (example:
 }
 ```
 
-Then, in the chat tool picker (or via tool sets), deselect the built-in
-terminal tools so the agent can only run commands through shell-mcp.
+### Turning off Copilot's built-in shell
+
+Copilot has no project-level equivalent of Claude Code's `deny` rule, and what
+works depends on where Copilot runs. Status as of 2026-10-25; only the
+`.vscode/mcp.json` setup above has been tested with shell-mcp.
+
+**VS Code, Local harness:** in Agent mode, select **Configure Tools** in the
+chat input and deselect the built-in terminal tools (the `execute` group:
+`runInTerminal`, `getTerminalOutput`, `createAndRunTask`, ...). The selection
+applies to the current request. To make it reusable, add a custom agent with an
+explicit tools list, for example `.github/agents/sandbox.agent.md`, and pick it
+in the agent dropdown. With a `tools` list, only those tools are available:
+
+```markdown
+---
+name: Sandbox
+description: Coding agent whose commands run only in the shell-mcp sandbox
+tools: ['read', 'edit', 'search', 'sandbox/*']
+---
+Run every command through the sandbox shell tools. Use the file tools with host paths.
+```
+
+**VS Code, Copilot harness (Agent Host):** the harness's built-in tools are
+read-only in the Agent Customizations **Tools** tab, so the shell cannot be
+deselected there, and the docs do not promise that custom agent `tools` lists
+apply. Approval settings such as `chat.tools.terminal.autoApprove` only force a
+confirmation; they do not block commands. The one documented way to block a
+tool call is a `preToolUse` hook. Copilot reads repository hooks from
+`.github/hooks/*.json`; its shell tools (`bash`, `powershell`) match the
+Claude-style name `Bash`, and a command `preToolUse` hook that exits non-zero
+denies the call. Untested sketch, `.github/hooks/deny-shell.json`:
+
+```json
+{
+  "version": 1,
+  "hooks": {
+    "PreToolUse": [
+      { "matcher": "Bash", "hooks": [ { "type": "command", "command": "echo Use the sandbox shell tool instead 1>&2 & exit 2" } ] }
+    ]
+  }
+}
+```
+
+GitHub documents hooks for Copilot CLI and the cloud agent; whether the VS Code
+Agent Host runs them is unconfirmed. Check by asking the agent to run
+`uname -a` with its built-in shell: the call should be blocked.
+
+**Copilot CLI:** deny the built-in shell and allow the shell-mcp server per
+session (deny rules win over every allow rule, including `--allow-all-tools`):
+
+```powershell
+copilot --deny-tool='shell' --allow-tool='sandbox'
+```
+
+These flags are not saved to a config file, so put them in a wrapper script.
+The CLI does not read `.vscode/mcp.json`; add the server with `/mcp add` using
+the same command and arguments, and use the name `/mcp` shows. Unverified on
+Windows: whether the CLI's PowerShell tool is also covered by `shell`.
+
+References: [VS Code: use tools with agents](https://code.visualstudio.com/docs/agents/agent-tools),
+[custom agents](https://code.visualstudio.com/docs/agent-customization/custom-agents),
+[approvals](https://code.visualstudio.com/docs/agents/run/approvals),
+[Copilot hooks reference](https://docs.github.com/en/copilot/reference/hooks-reference),
+[Copilot CLI: allowing tools](https://docs.github.com/en/copilot/how-tos/copilot-cli/use-copilot-cli/allowing-tools).
 
 ## Client timeouts
 
