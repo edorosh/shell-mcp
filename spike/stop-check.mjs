@@ -2,13 +2,10 @@
 // Usage (PowerShell, from the repo root): node spike\stop-check.mjs <sandbox-name>
 // It STOPS and then STARTS the named sandbox via `msb`. Use the throwaway spike sandbox.
 import { execSync } from "node:child_process";
-import { createRequire } from "node:module";
-import { pathToFileURL } from "node:url";
 
 const name = process.argv[2];
 if (!name) throw new Error("usage: node spike/stop-check.mjs <sandbox-name>");
-const require = createRequire(import.meta.url);
-const m = await import(pathToFileURL(require.resolve("microsandbox", { paths: [process.cwd(), new URL(".", import.meta.url).pathname] })).href);
+const m = await import("microsandbox"); // resolved from spike/node_modules or the repo's node_modules
 
 const show = (label, e) =>
   console.log(label, "| class:", e?.constructor?.name, "| code:", e?.code, "| message:", e?.message);
