@@ -9,10 +9,12 @@ const isWin = process.platform === "win32";
 const repo = resolve(import.meta.dirname, "..");
 const pkg = JSON.parse(readFileSync(join(repo, "package.json"), "utf8"));
 
+class CheckFailed extends Error {}
+
 function fail(msg) {
-  console.error(`FAIL ${msg}`);
-  process.exit(1);
+  throw new CheckFailed(msg);
 }
+
 function ok(msg) {
   console.log(`ok ${msg}`);
 }
@@ -23,7 +25,8 @@ function check(cond, msg) {
 
 // npm and npx are .cmd files on Windows, so they need a shell there.
 function run(cmd, args, cwd) {
-  const r = spawnSync(cmd, args, {
+  const argv = isWin ? args.map((a) => (/[\s"]/.test(a) ? `"${a.replaceAll('"', '\\"')}"` : a)) : args;
+  const r = spawnSync(cmd, argv, {
     cwd,
     encoding: "utf8",
     shell: isWin,
@@ -41,6 +44,7 @@ function runOk(cmd, args, cwd) {
   return r;
 }
 
+let failure;
 const tmp = mkdtempSync(join(tmpdir(), "shell-mcp-pack-"));
 try {
   const packDir = join(tmp, "pack");
@@ -75,22 +79,33 @@ try {
   const entry = readFileSync(join(installed, "dist", "index.js"), "utf8");
   check(entry.startsWith("#!/usr/bin/env node"), "dist/index.js starts with the node shebang");
 
-  const version = runOk("npx", ["--no-install", "shell-mcp", "--version"], projDir);
-  check(version.stdout.includes(pkg.version), `npx shell-mcp --version prints ${pkg.version}`);
-  const help = run("npx", ["--no-install", "shell-mcp", "--help"], projDir);
-  check(help.status === 0, "npx shell-mcp --help exits 0");
-
-  if (isWin) {
-    const cmd = run("cmd", ["/c", "node_modules\\.bin\\shell-mcp.cmd", "--version"], projDir);
-    check(cmd.status === 0 && cmd.stdout.includes(pkg.version), "cmd /c shell-mcp.cmd --version works");
-  } else {
-    ok("cmd /c shell-mcp.cmd --version skipped (not Windows)");
+  const sdk = pkg.dependencies.microsandbox;
+  const launchers = [
+    { name: "npx", cmd: "npx", args: ["--no-install", "shell-mcp"] },
+    { name: "cmd shim", cmd: "cmd", args: ["/c", "node_modules\\.bin\\shell-mcp.cmd"], winOnly: true },
+  ];
+  for (const l of launchers) {
+    if (l.winOnly && !isWin) {
+      ok(`${l.name}: --version, --help and no-flag skipped (not Windows)`);
+      continue;
+    }
+    const version = run(l.cmd, [...l.args, "--version"], projDir);
+    check(version.status === 0, `${l.name}: --version exits 0`);
+    check(version.stdout.trim() === `shell-mcp ${pkg.version} (microsandbox SDK ${sdk})`, `${l.name}: --version prints shell-mcp ${pkg.version} (microsandbox SDK ${sdk})`);
+    const help = run(l.cmd, [...l.args, "--help"], projDir);
+    check(help.status === 0, `${l.name}: --help exits 0`);
+    const bare = run(l.cmd, l.args, projDir);
+    check(bare.status === 1, `${l.name}: no-flag run exits 1 (got ${bare.status})`);
+    check(bare.stdout === "", `${l.name}: no-flag run writes nothing to stdout`);
+    check(/sandbox is required/i.test(bare.stderr), `${l.name}: no-flag run says on stderr that a sandbox is required`);
   }
-
-  const bare = run("npx", ["--no-install", "shell-mcp"], projDir);
-  check(bare.status === 1, `no-flag run exits 1 (got ${bare.status})`);
-  check(bare.stdout === "", "no-flag run writes nothing to stdout");
-  check(/sandbox is required/i.test(bare.stderr), "no-flag run explains on stderr that a sandbox is required");
+} catch (e) {
+  if (!(e instanceof CheckFailed)) throw e;
+  failure = e;
 } finally {
-  rmSync(tmp, { recursive: true, force: true });
+  rmSync(tmp, { recursive: true, force: true, maxRetries: 3 });
+}
+if (failure) {
+  console.error(`FAIL ${failure.message}`);
+  process.exit(1);
 }
