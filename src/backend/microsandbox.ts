@@ -3,11 +3,12 @@
  *
  * Behavior below was derived from the SDK source, not from a live run (no Task 1 spike yet).
  * Assumptions to verify in the Task 1 spike:
- *  - A timed-out execStream is SIGKILLed by the SDK and ends with a raw "exited" event, not an
- *    ExecTimeoutError (only wait()/collect() raise that). We detect the timeout with our own clock.
+ *  - A timed-out execStream is SIGKILLed by the SDK and ends with a raw "exited" event whose code is
+ *    -1 (agentd exit_code() for a non-normal exit), not an ExecTimeoutError (only wait()/collect()).
+ *    Timed out = code -1 after the deadline, or our backstop/ExecTimeoutError.
  *  - No stdout/stderr events arrive after "exited"; we stop reading there.
- *  - A spawn failure ("failed" event) normalizes to an unknown event and the stream ends without
- *    "exited"; we report that as outcome_unknown.
+ *  - A spawn failure (native "failed" event) normalizes to undefined and the stream ends without
+ *    "exited"; we report not_started. stdin_error (also undefined) is non-terminal.
  *  - Sandbox.get() rejects with code "sandboxNotFound"; SandboxHandle.status is "running" when usable.
  *  - Job codes: "job_not_found", "job_not_running" (kill after exit), "launch_unconfirmed",
  *    "output_gap" (logs({fromCursor}) after the cursor's records expired), "sandbox_not_running".
@@ -28,7 +29,8 @@ export type SdkExecEvent =
   | { kind: "stdout" | "stderr"; data: Uint8Array }
   | { kind: "exited"; code: number };
 export interface SdkExecHandle {
-  recv(): Promise<SdkExecEvent | null>;
+  /** undefined: an event kind the SDK did not normalize (native "failed"/"stdin_error"). */
+  recv(): Promise<SdkExecEvent | null | undefined>;
   kill(): Promise<void>;
 }
 export interface SdkJobInfo {
@@ -72,7 +74,7 @@ const msgOf = (e: unknown): string => (e instanceof Error ? e.message : String(e
 
 const NOT_FOUND = new Set(["sandboxNotFound"]);
 const NOT_RUNNING = new Set(["sandboxNotRunning", "sandbox_not_running"]);
-const CONNECTION = new Set(["io", "http", "cloudHttp", "protocol", "runtime", "sandbox_error"]);
+const CONNECTION = new Set(["io", "http", "cloudHttp", "protocol", "runtime", "sandbox_error", "sandboxReplaced"]);
 
 const isHigh = (c: number) => c >= 0xd800 && c <= 0xdbff;
 const isLow = (c: number) => c >= 0xdc00 && c <= 0xdfff;
@@ -127,7 +129,7 @@ function mapState(info: SdkJobInfo): JobStatus {
   }
 }
 
-type Stop = { stop: "deadline" | "abort" };
+type Stop = "deadline" | "abort";
 
 export class MicrosandboxBackend implements Backend {
   private conn?: Promise<SdkSandbox>;
@@ -150,7 +152,10 @@ export class MicrosandboxBackend implements Backend {
 
   async run(script: string, opts: { timeoutMs: number; signal?: AbortSignal }): Promise<RunResult> {
     const { timeoutMs, signal } = opts;
+    const cancelled = () => new BackendError("not_started", "cancelled before start");
+    if (signal?.aborted) throw cancelled();
     const sb = await this.connect();
+    if (signal?.aborted) throw cancelled();
     const start = this.now();
     let handle: SdkExecHandle;
     try {
@@ -163,53 +168,80 @@ export class MicrosandboxBackend implements Backend {
     const acc = { stdout: new Utf8Accumulator(), stderr: new Utf8Accumulator() };
     let exitCode: number | null = null;
     let exited = false;
-    let timedOut = false;
-    let stopped: Stop["stop"] | undefined;
+    let execTimeout = false;
+    let unknownEvent = false;
+    let failure: string | undefined;
 
+    // A stop request wakes the pending recv; each iteration's promise is fresh, so nothing accumulates.
+    let stopped: Stop | undefined;
+    let wake: ((s: Stop) => void) | undefined;
+    const requestStop = (s: Stop) => {
+      stopped ??= s;
+      wake?.(s);
+    };
     const kill = () => void handle.kill().catch(() => {});
-    let giveUp!: (s: Stop) => void;
-    const stop = new Promise<Stop>((r) => (giveUp = r));
-    const timers = [setTimeout(() => giveUp({ stop: "deadline" }), timeoutMs + this.graceMs)];
+    const timers = [setTimeout(() => requestStop("deadline"), timeoutMs + this.graceMs)];
     const onAbort = () => {
       kill();
-      timers.push(setTimeout(() => giveUp({ stop: "abort" }), this.graceMs));
+      timers.push(setTimeout(() => requestStop("abort"), this.graceMs));
     };
     if (signal?.aborted) onAbort();
     else signal?.addEventListener("abort", onAbort, { once: true });
 
     try {
-      for (;;) {
-        const ev = await Promise.race([handle.recv(), stop]);
+      while (!stopped) {
+        const ev = await new Promise<SdkExecEvent | null | undefined | Stop>((resolve, reject) => {
+          wake = resolve;
+          handle.recv().then(resolve, reject);
+        });
+        wake = undefined;
         if (ev === null) break;
-        if ("stop" in ev) {
-          stopped = ev.stop;
-          kill();
-          break;
-        }
-        if (ev.kind === "stdout" || ev.kind === "stderr") {
+        if (typeof ev === "string") break;
+        if (ev?.kind === "stdout" || ev?.kind === "stderr") {
           acc[ev.kind].push(ev.data);
           out.append(acc[ev.kind].drain());
-        } else if (ev.kind === "exited") {
+        } else if (ev?.kind === "exited") {
           exitCode = ev.code;
           exited = true;
           break;
+        } else if (ev?.kind !== "started") {
+          // The TS SDK normalizes native "failed"/"stdin_error" events to undefined; keep going.
+          unknownEvent = true;
+          const raw = ev as { kind?: string; data?: Uint8Array } | undefined;
+          if (raw?.kind === "failed") failure = raw.data ? new TextDecoder().decode(raw.data) : "spawn failed";
         }
       }
     } catch (e) {
-      if (codeOf(e) === "execTimeout") timedOut = true;
+      if (codeOf(e) === "execTimeout") execTimeout = true;
       else throw this.fail(e, "after");
     } finally {
       for (const t of timers) clearTimeout(t);
       signal?.removeEventListener("abort", onAbort);
     }
+    if (stopped) kill();
 
     out.append(acc.stdout.finish());
     out.append(acc.stderr.finish());
-    if (stopped === "deadline" || this.now() - start >= timeoutMs) timedOut = true;
-    if (!exited && !timedOut && !signal?.aborted) {
-      throw new BackendError("outcome_unknown", "the command's output stream ended without an exit status");
+    const deadlinePassed = stopped === "deadline" || this.now() - start >= timeoutMs;
+    const result = (exit: number | null, timedOut: boolean): RunResult => ({
+      output: out.text(), exitCode: exit, timedOut, droppedChars: out.dropped,
+    });
+
+    // execTimeout: the SDK confirmed the exit after its deadline kill.
+    if (execTimeout) return result(null, true);
+    if (exited) {
+      // agentd reports -1 for a signal death; the SDK's deadline kill is SIGKILL.
+      const killedByDeadline = exitCode === -1 && deadlinePassed;
+      return killedByDeadline ? result(null, true) : result(exitCode, false);
     }
-    return { output: out.text(), exitCode: timedOut ? null : exitCode, timedOut, droppedChars: out.dropped };
+    if (deadlinePassed) {
+      throw new BackendError("outcome_unknown", `the ${timeoutMs} ms deadline passed but the process exit was not confirmed`);
+    }
+    if (signal?.aborted) return result(null, false);
+    if (failure !== undefined || unknownEvent) {
+      throw new BackendError("not_started", `the command failed to start${failure ? `: ${failure}` : ""}`);
+    }
+    throw new BackendError("outcome_unknown", "the command's output stream ended without an exit status");
   }
 
   async startJob(script: string): Promise<{ id: string }> {
@@ -286,12 +318,13 @@ export class MicrosandboxBackend implements Backend {
       } catch (e) {
         if (codeOf(e) !== "job_not_running") throw e;
         // The job finished before the kill landed: report its real status.
-        return { confirmed: true, status: mapState(await job.inspect()) };
+        const status = mapState(await job.inspect());
+        return { confirmed: status.state !== "running", status };
       }
       const deadline = this.now() + waitMs;
       for (;;) {
         const status = mapState(await job.inspect());
-        if (status.state === "exited") return { confirmed: true, status };
+        if (status.state !== "running") return { confirmed: true, status };
         const left = deadline - this.now();
         if (left <= 0) return { confirmed: false, status };
         await new Promise((r) => setTimeout(r, Math.min(100, left)));

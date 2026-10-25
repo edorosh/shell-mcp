@@ -20,7 +20,7 @@ class SdkErr extends Error {
 }
 
 interface ExecScript {
-  events: (SdkExecEvent | SdkErr | "hang")[];
+  events: (SdkExecEvent | SdkErr | "hang" | undefined | { kind: "failed"; data?: Uint8Array })[];
 }
 
 function info(over: Partial<SdkJobInfo> = {}): SdkJobInfo {
@@ -77,11 +77,11 @@ class FakeSandbox implements SdkSandbox {
     return {
       recv: async () => {
         this.onRecv?.();
+        if (events.length === 0) return null;
         const e = events.shift();
-        if (e === undefined) return null;
         if (e === "hang") return new Promise<never>(() => {});
         if (e instanceof SdkErr) throw e;
-        return e;
+        return e as SdkExecEvent | undefined;
       },
       kill: async () => { this.killedExec++; },
     };
@@ -247,11 +247,48 @@ describe("MicrosandboxBackend.run", () => {
     expect(r.droppedChars).toBe(6);
   });
 
-  it("reports a timeout when the stream ends at or after the deadline", async () => {
+  it("reports a timeout when the shell dies by signal (-1) after the deadline", async () => {
     const { be, sb } = setup({ clock: [0, 2000] });
-    sb.script.events = [{ kind: "stdout", data: enc("partial") }, { kind: "exited", code: 137 }];
+    sb.script.events = [{ kind: "stdout", data: enc("partial") }, { kind: "exited", code: -1 }];
     const r = await be.run("x", { timeoutMs: 1000 });
     expect(r).toEqual({ output: "partial", exitCode: null, timedOut: true, droppedChars: 0 });
+  });
+
+  it("keeps the real exit code for a natural exit at or after the deadline", async () => {
+    const { be, sb } = setup({ clock: [0, 1000] });
+    sb.script.events = [{ kind: "stdout", data: enc("done") }, { kind: "exited", code: 0 }];
+    const r = await be.run("x", { timeoutMs: 1000 });
+    expect(r).toEqual({ output: "done", exitCode: 0, timedOut: false, droppedChars: 0 });
+  });
+
+  it("does not claim a kill when the stream ends after the deadline without an exit", async () => {
+    const { be, sb } = setup({ clock: [0, 2000] });
+    sb.script.events = [{ kind: "stdout", data: enc("x") }];
+    expect(await kindOf(be.run("x", { timeoutMs: 1000 }))).toBe("outcome_unknown");
+  });
+
+  it("skips an unnormalized (undefined) event mid-stream", async () => {
+    const { be, sb, calls } = setup();
+    sb.script.events = [{ kind: "stdout", data: enc("a") }, undefined, { kind: "stdout", data: enc("b") }, { kind: "exited", code: 0 }];
+    expect(await be.run("x", { timeoutMs: 1000 })).toMatchObject({ output: "ab", exitCode: 0, timedOut: false });
+    await be.run("x", { timeoutMs: 1000 });
+    expect(calls.connect).toBe(1);
+  });
+
+  it("maps a spawn failure (failed event, no exit) to not_started", async () => {
+    const { be, sb } = setup();
+    sb.script.events = [undefined];
+    expect(await kindOf(be.run("x", { timeoutMs: 1000 }))).toBe("not_started");
+    sb.script.events = [{ kind: "failed", data: enc("bash: not found") }];
+    await expect(be.run("x", { timeoutMs: 1000 })).rejects.toThrow("bash: not found");
+  });
+
+  it("does not launch when the signal aborts before the exec handle exists", async () => {
+    const { be, sb } = setup();
+    const ac = new AbortController();
+    ac.abort();
+    expect(await kindOf(be.run("x", { timeoutMs: 1000, signal: ac.signal }))).toBe("not_started");
+    expect(sb.execs).toHaveLength(0);
   });
 
   it("treats an ExecTimeoutError during recv as a timeout and keeps output", async () => {
@@ -303,19 +340,18 @@ describe("MicrosandboxBackend.run", () => {
 });
 
 describe("MicrosandboxBackend.run backstop", () => {
-  it("gives up and kills when the stream outlives the deadline plus grace", async () => {
+  it("gives up, kills, and reports an unconfirmed outcome when the stream outlives deadline plus grace", async () => {
     const { be, sb } = setup({ graceMs: 20 });
     sb.script.events = [{ kind: "stdout", data: enc("stuck") }, "hang"];
-    const r = await be.run("x", { timeoutMs: 10 });
-    expect(r).toEqual({ output: "stuck", exitCode: null, timedOut: true, droppedChars: 0 });
+    expect(await kindOf(be.run("x", { timeoutMs: 10 }))).toBe("outcome_unknown");
     expect(sb.killedExec).toBeGreaterThanOrEqual(1);
   });
 
   it("gives up after grace when an aborted run never ends", async () => {
     const { be, sb } = setup({ graceMs: 20 });
     const ac = new AbortController();
-    ac.abort();
     sb.script.events = ["hang"];
+    sb.onRecv = () => ac.abort();
     const r = await be.run("x", { timeoutMs: 60_000, signal: ac.signal });
     expect(r).toMatchObject({ exitCode: null, timedOut: false });
     expect(sb.killedExec).toBeGreaterThanOrEqual(1);
@@ -437,6 +473,22 @@ describe("MicrosandboxBackend jobs", () => {
     job.killError = new SdkErr("job_not_running");
     job.infos = [info({ state: "exited", exitCode: 0 })];
     expect(await be.killJob(id, 1000)).toEqual({ confirmed: true, status: { state: "exited", exitCode: 0 } });
+  });
+
+  it("killJob confirms when the job becomes lost", async () => {
+    const { be, sb } = setup();
+    const { id } = await be.startJob("x");
+    sb.jobs.get(id)!.infos = [info({ state: "running" }), info({ state: "lost" })];
+    expect(await be.killJob(id, 1000)).toEqual({ confirmed: true, status: { state: "lost" } });
+  });
+
+  it("killJob race: job_not_running but inspect still says running is not confirmed", async () => {
+    const { be, sb } = setup();
+    const { id } = await be.startJob("x");
+    const job = sb.jobs.get(id)!;
+    job.killError = new SdkErr("job_not_running");
+    job.infos = [info({ state: "running" })];
+    expect(await be.killJob(id, 1000)).toEqual({ confirmed: false, status: { state: "running" } });
   });
 
   it("maps connection-class job errors to unreachable", async () => {

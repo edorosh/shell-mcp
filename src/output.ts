@@ -19,7 +19,10 @@ export class Utf8Accumulator {
     return s;
   }
 
-  /** End of stream: flush any incomplete sequence (becomes U+FFFD) and return the full text. */
+  /**
+   * End of stream: flush any incomplete sequence (becomes U+FFFD) and return the text not yet
+   * drained (the full text if drain() was never called).
+   */
   finish(): string {
     this.buf += this.decoder.decode();
     return this.buf;
