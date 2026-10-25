@@ -18,9 +18,17 @@ Plan: [v1 implementation plan](docs/superpowers/plans/2026-10-25-shell-mcp-v1.md
 - Works with Claude Code and GitHub Copilot on Windows hosts (G4).
 - Distribution: not published. Clients run `node <clone>\dist\index.js`.
 
+Known issues:
+
+- After the working directory is deleted on the host, the sandbox mount takes
+  about 5 s to notice it.
+- The `output_gap` and `launch_unconfirmed` paths are covered only by unit
+  tests and have never fired on a real host.
+
 ## v2: npm package for easy install on Windows
 
-Status: specified.
+Status: specified. Ships as npm version `1.0.0`; milestone numbers and
+package versions are unrelated.
 Design: [v2 npm distribution design](docs/superpowers/specs/2026-10-25-shell-mcp-v2-npm-design.md).
 Plan: [v2 implementation plan](docs/superpowers/plans/2026-10-25-shell-mcp-v2.md).
 
@@ -39,6 +47,8 @@ building the repo.
   provenance. Semver, with a changelog.
 - Update the README and client setup snippets (Claude Code, GitHub Copilot) to
   use the published package.
+- Verify each untested client option in the [client support](#client-support)
+  table, or remove it from the docs.
 
 ## v3: Sandbox created from the MCP config
 
@@ -54,15 +64,55 @@ sandbox lifecycle management (N1).
   already matches it; stop it when the server exits.
 - Path translation (G3) follows the configured mounts instead of a separate
   mapping.
-- Open questions: start-up time on the first tool call, what happens to a
-  running machine when the config changes, and whether data in the sandbox
-  survives a restart.
+- Keep today's attach mode (`--sandbox` names an existing sandbox) next to the
+  new create mode, so v2 configs keep working.
+- Network access is denied unless the config allows it.
+- Open questions: flags or a config file for the machine definition, start-up
+  time on the first tool call, what happens to a running machine when the
+  config changes, and whether data in the sandbox survives a restart.
+- Notes on the SDK's creation API: `v3-spec/sdk-create-notes.md` in the project
+  files.
+
+Done when: a user with only `msb` installed adds one MCP config entry, and the
+first `shell` call runs in a sandbox shell-mcp created, with the project folder
+mounted.
+
+## v4: Linux and macOS hosts
+
+Status: idea. Takes on N6.
+
+Goal: shell-mcp runs on Linux and macOS hosts as well as Windows.
+
+- Path translation for POSIX host paths.
+- CI runs the test suite on Windows, Linux and macOS.
+- Test the Linux/macOS Copilot hook (`deny-shell.sh`) with a real client.
+- npm stays the install method on every host. A Homebrew formula in our own
+  tap is optional, only if macOS users ask for it: it would still wrap npm,
+  and `brew upgrade` would undo the exact version pin that keeps the SDK and
+  `msb` matched.
+
+Done when: the acceptance suite passes on a Linux and a macOS host with Claude
+Code and Copilot.
 
 ## Later (unscheduled)
 
-Deferred by the v1 spec. None of these is committed to a milestone yet.
+Deferred by the v1 spec or found while testing v1. None of these is committed
+to a milestone yet.
 
-- Linux and macOS hosts (N6).
 - Backends other than microsandbox, e.g. Docker sbx (N5).
 - More than one sandbox per instance, or switching sandboxes at runtime (N2).
 - Interactive programs that need a terminal (N3).
+- Progress notifications for long `shell` calls. Copilot showed nothing for
+  the full 600 s of a long call.
+- Ship the client setup files (such as the Copilot hook that turns off the
+  built-in shell) with the package, for example through an `init` command.
+
+## Client support
+
+| Client | Host | Status |
+|--------|------|--------|
+| Claude Code | Windows | Verified |
+| GitHub Copilot in VS Code | Windows | Verified, including the hook that turns off the built-in shell |
+| GitHub Copilot hook (`deny-shell.sh`) | Linux, macOS | Untested |
+| Local-harness agent file | Windows | Untested |
+| Copilot CLI with `--deny-tool` | Windows | Untested |
