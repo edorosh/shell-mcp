@@ -5,7 +5,7 @@
       {
         "type": "command",
         "powershell": "powershell -NoProfile -ExecutionPolicy Bypass -File .github/hooks/deny-shell.ps1",
-        "bash": "exit 2"
+        "bash": "bash .github/hooks/deny-shell.sh"
       }
     ]
   }
