@@ -3,6 +3,7 @@ import { runCheck, type CheckDeps } from "../src/check.js";
 import { BackendError } from "../src/backend/types.js";
 import type { Config } from "../src/config.js";
 import type { RuntimeCheck } from "../src/runtime.js";
+import { backendErrorText } from "../src/service.js";
 import { FakeBackend } from "./fakeBackend.js";
 
 const cfg = (over: Partial<Config> = {}): Config => ({
@@ -21,7 +22,11 @@ function setup(o: { fb?: FakeBackend; sdk?: () => Promise<unknown>; runtime?: Ru
     runtime: async () => o.runtime ?? okRuntime,
     readdir: async () => o.host ?? ["a", "b"],
   };
-  const run = async () => ({ code: await runCheck(o.config ?? cfg(), deps, (l) => lines.push(l)), lines });
+  const run = async () => {
+    const code = await runCheck(o.config ?? cfg(), deps, (l) => lines.push(l));
+    onlyAllowedCalls(fb);
+    return { code, lines };
+  };
   return { fb, run };
 }
 const line = (lines: string[], step: string) => lines.find((l) => l.includes(` ${step}:`)) ?? "";
@@ -123,5 +128,51 @@ describe("runCheck", () => {
     const { code, lines } = await run();
     expect(code).toBe(0);
     expect(line(lines, "mount")).toMatch(/^ok.*empty/);
+  });
+
+  it.each(["unreachable", "not_found"] as const)("fails the sandbox step on %s with the shared wording", async (kind) => {
+    const { fb, run } = setup();
+    const err = new BackendError(kind, "boom");
+    fb.queueRun(err);
+    const { code, lines } = await run();
+    expect(code).toBe(1);
+    expect(line(lines, "sandbox")).toBe(`FAIL    sandbox: ${backendErrorText(err, "dev")}`);
+    expect(line(lines, "shell")).toMatch(/^skipped/);
+    expect(line(lines, "mount")).toMatch(/^skipped/);
+  });
+
+  it("fails the sandbox step when uname -s times out", async () => {
+    const { fb, run } = setup();
+    fb.queueRun({ output: "", exitCode: null, timedOut: true, droppedChars: 0 });
+    const { code, lines } = await run();
+    expect(code).toBe(1);
+    expect(line(lines, "sandbox")).toMatch(/^FAIL.*30s/);
+    expect(line(lines, "shell")).toMatch(/^skipped/);
+    expect(line(lines, "mount")).toMatch(/^skipped/);
+  });
+
+  it.each([
+    ["non-zero exit", { output: "", exitCode: 2, timedOut: false, droppedChars: 0 }, /exit code 2/],
+    ["timeout", { output: "", exitCode: null, timedOut: true, droppedChars: 0 }, /timed out/],
+  ])("fails the mount step when ls has a %s", async (_n, res, re) => {
+    const { fb, run } = setup();
+    fb.queueRun(out("Linux\n")).queueRun(res);
+    const { code, lines } = await run();
+    expect(code).toBe(1);
+    expect(line(lines, "mount")).toMatch(/^FAIL/);
+    expect(line(lines, "mount")).toMatch(re);
+  });
+
+  it("fails the mount step when readdir rejects", async () => {
+    const fb = new FakeBackend();
+    fb.queueRun(out("Linux\n")).queueRun(out("a\n"));
+    const lines: string[] = [];
+    const code = await runCheck(cfg(), {
+      loadSdk: async () => ({}), backend: fb, runtime: async () => okRuntime,
+      readdir: async () => { throw new Error("ENOENT: no such directory"); },
+    }, (l) => lines.push(l));
+    onlyAllowedCalls(fb);
+    expect(code).toBe(1);
+    expect(line(lines, "mount")).toMatch(/^FAIL.*ENOENT/);
   });
 });

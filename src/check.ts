@@ -11,7 +11,7 @@ export interface CheckDeps {
   readdir(p: string): Promise<string[]>;
 }
 
-const UNAME_TIMEOUT_MS = 30_000;
+const CHECK_TIMEOUT_MS = 30_000;
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 function diff(a: string[], b: string[], fold: (s: string) => string): string[] {
@@ -61,7 +61,7 @@ export async function runCheck(config: Config, deps: CheckDeps, write: (line: st
   // 4 and 5: one `uname -s` run
   let uname: Awaited<ReturnType<Backend["run"]>> | undefined;
   try {
-    uname = await deps.backend.run("uname -s", { timeoutMs: UNAME_TIMEOUT_MS });
+    uname = await deps.backend.run("uname -s", { timeoutMs: CHECK_TIMEOUT_MS });
   } catch (e) {
     if (e instanceof BackendError && e.kind === "not_started") {
       ok("sandbox", `"${config.sandbox}" is running`);
@@ -86,14 +86,14 @@ export async function runCheck(config: Config, deps: CheckDeps, write: (line: st
   if (uname.exitCode !== 0 || kernel !== "Linux") {
     fail("shell", `uname -s gave ${JSON.stringify(kernel)} with exit code ${uname.exitCode ?? "unknown"}, expected Linux with exit 0; is ${config.shell} installed in the image? or set --shell`);
     skipped("mount", "shell failed");
-    return failed ? 1 : 0;
+    return 1;
   }
   ok("shell", `${config.shell} runs, uname -s is Linux`);
 
   // 6. mount
   const fold = config.platform === "win32" ? (s: string) => s.toLowerCase() : (s: string) => s;
   try {
-    const ls = await deps.backend.run(`ls -A1 -- ${shQuote(config.guestRoot)}`, { timeoutMs: UNAME_TIMEOUT_MS });
+    const ls = await deps.backend.run(`ls -A1 -- ${shQuote(config.guestRoot)}`, { timeoutMs: CHECK_TIMEOUT_MS });
     if (ls.timedOut || ls.exitCode !== 0) {
       fail("mount", `listing ${config.guestRoot} in the sandbox failed (${ls.timedOut ? "timed out" : `exit code ${ls.exitCode ?? "unknown"}`}); is the host root mounted at the guest root?`);
     } else {
