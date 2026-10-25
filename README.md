@@ -179,18 +179,16 @@ the sandbox is running and reachable.
   deadline kills the shell. The spike confirmed this on Windows with `msb` 0.7.11
   (output produced before the deadline is kept and the process group dies).
   shell-mcp's own kill half a second past the deadline is only a fallback.
-- Not yet verified on a real host: the error for a stopped sandbox with a cached
-  connection (acceptance criterion 10) and the `output_gap`/`launch_unconfirmed`
-  error paths. The integration suite is meant to cover the first.
+- Not yet verified on a real host: the `output_gap` and `launch_unconfirmed` error
+  paths.
 
 ## Status
 
 The microsandbox SDK spike (`spike/`) has been run on Windows (results in
 [spike-results.md](docs/superpowers/specs/spike-results.md)). The integration
-suite (`test/integration.test.ts`) has been run once on Windows: criteria 1–9 and
-11 passed, criterion 10 is not yet run, and criterion 12 (deleting the current
-directory from the host) failed because of a short host-mount delay; the test
-now waits for it and needs a re-run (see spike-results.md). Behaviors that depend on the real
+suite (`test/integration.test.ts`) passes all 12 acceptance criteria against a real
+sandbox on Windows (with `SHELL_MCP_IT_ALLOW_STOP=1`; see spike-results.md). The
+manual Claude Code / Copilot check is still to do. Behaviors that depend on the real
 SDK are listed under [Limitations](#limitations). Linux and macOS hosts are
 deferred; see [ROADMAP.md](ROADMAP.md).
 

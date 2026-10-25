@@ -35,10 +35,11 @@ Run on 2026-10-25 against a sandbox named `spike` (mount `C:\temp\spike-ws:/work
 
 ## Integration run (`test/integration.test.ts`, same sandbox)
 
-10 passed, 1 skipped (criterion 10, needs `SHELL_MCP_IT_ALLOW_STOP=1`), **1 failed**.
+**Final result: 12 of 12 passed** on Windows with `SHELL_MCP_IT_ALLOW_STOP=1` (about 20 s). Getting there took three findings, all fixed:
 
-- Passed: criteria 1–9 and 11, including 5 (`sleep 30`, `timeout_ms` 1000, process gone) and 8 (background loop, kill).
-- **Failed: criterion 12.** After the host deleted the current directory (`fs.rmSync` on `C:\temp\spike-ws\<scratch>\gone`), the next `pwd` printed `/workspace/<scratch>/gone`: the wrapper's `cd -- '<cwd>'` still succeeded in the guest, so no reset happened and no note was printed. The wrapper itself is not at fault; the guest still resolves the directory after the host deleted it, which points at the host-mount caching in the guest (to be confirmed).
+- **Criterion 12** failed on the first run because the guest keeps resolving a directory the host deleted (see below). The test now waits for the guest to notice.
+- **Criterion 10** failed twice. The SDK's error for a connection held across `msb stop` has class `Error`, code `GenericFailure` and message `[AgentClient] agent client error: connect \\.\pipe\msb-agent-…`. A fresh `Sandbox.get` after the stop reports it correctly (`status: stopped`, `SandboxNotRunningError` / `sandboxNotRunning`). `GenericFailure` is now treated as a lost connection (reproduced with `spike/stop-check.mjs`).
+- A progress-timer unit test needed a longer delay for Windows timer granularity.
 
 ### Criterion 12: host-mount delay (measured by hand)
 
