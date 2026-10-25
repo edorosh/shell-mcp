@@ -5,7 +5,7 @@ Milestones in delivery order. Each milestone ships on its own. Requirement IDs
 
 ## v1: Sandboxed shell tool on Windows
 
-Status: planned. Spec: [product-spec.md](docs/product-spec.md).
+Status: done (2026-10-25). Spec: [product-spec.md](docs/product-spec.md).
 Design: [shell-mcp design](docs/superpowers/specs/2026-10-25-shell-mcp-design.md).
 Plan: [v1 implementation plan](docs/superpowers/plans/2026-10-25-shell-mcp-v1.md).
 
@@ -20,19 +20,21 @@ Plan: [v1 implementation plan](docs/superpowers/plans/2026-10-25-shell-mcp-v1.md
 
 ## v2: npm package for easy install on Windows
 
-Status: next.
+Status: specified.
+Design: [v2 npm distribution design](docs/superpowers/specs/2026-10-25-shell-mcp-v2-npm-design.md).
+Plan: [v2 implementation plan](docs/superpowers/plans/2026-10-25-shell-mcp-v2.md).
 
 Goal: a Windows user installs and configures shell-mcp without cloning or
 building the repo.
 
-- Publish to the npm registry under a scope the user owns (e.g.
-  `@<scope>/shell-mcp`). The unscoped name `shell-mcp` belongs to an unrelated
+- Publish to the npm registry as `@edorosh/shell-mcp` (MIT). The unscoped name `shell-mcp` belongs to an unrelated
   package, so the docs must never say `npx shell-mcp`.
-- Run with `npx -y @<scope>/shell-mcp ...` or install globally with
-  `npm i -g @<scope>/shell-mcp`. The `bin` entry works from `cmd`, PowerShell
+- Run with `npx -y @edorosh/shell-mcp@<version> ...` (exact version in client
+  configs) or install globally with `npm i -g @edorosh/shell-mcp`. The `bin` entry works from `cmd`, PowerShell
   and the clients' MCP launchers on Windows.
 - Pin the `microsandbox` SDK version exactly and document the supported `msb`
-  runtime version for each release.
+  runtime version for each release. `--check` and the startup log report
+  which `msb` the SDK resolved and whether its version matches.
 - Release pipeline: build, test and publish from CI on a version tag, with npm
   provenance. Semver, with a changelog.
 - Update the README and client setup snippets (Claude Code, GitHub Copilot) to
