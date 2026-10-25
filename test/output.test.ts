@@ -29,6 +29,17 @@ describe("Utf8Accumulator", () => {
     acc.push(new Uint8Array([0xc3]));
     expect(acc.finish()).toBe("\uFFFD");
   });
+  it("drain() returns and clears decoded text but keeps pending bytes", () => {
+    const acc = new Utf8Accumulator();
+    acc.push(new Uint8Array([0x61, 0xc3]));
+    expect(acc.drain()).toBe("a");
+    expect(acc.text()).toBe("");
+    acc.push(new Uint8Array([0xa9]));
+    expect(acc.drain()).toBe("é");
+    acc.push(new Uint8Array([0xe2]));
+    expect(acc.drain()).toBe("");
+    expect(acc.finish()).toBe("�");
+  });
   it("accepts strings", () => {
     const acc = new Utf8Accumulator();
     acc.push("ab");

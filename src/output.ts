@@ -12,6 +12,13 @@ export class Utf8Accumulator {
     return this.buf;
   }
 
+  /** Return the decoded text and clear it; pending partial bytes stay in the decoder. */
+  drain(): string {
+    const s = this.buf;
+    this.buf = "";
+    return s;
+  }
+
   /** End of stream: flush any incomplete sequence (becomes U+FFFD) and return the full text. */
   finish(): string {
     this.buf += this.decoder.decode();
