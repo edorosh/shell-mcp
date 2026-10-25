@@ -12,19 +12,33 @@ npm cannot configure trusted publishing before the package exists, so 1.0.0 is
 published by hand and CI publishes every later release.
 
 1. Publish 1.0.0 by hand:
-   - Check out the `v1.0.0` tag cleanly (`git status` shows nothing).
+   - Make a fresh clone checked out at the `v1.0.0` tag (or run
+     `git clean -xdf` in a clean checkout of it), so no stale gitignored
+     `dist/` is packed.
+   - Edit the `CHANGELOG.md` heading to `## [1.0.0] - YYYY-MM-DD` with the
+     release date, if it has none yet.
    - `npm ci`
+   - `npm test`
+   - `node scripts/check-pack.mjs`
    - `npm login`
    - `npm publish`
 
    This version has no provenance. CI-published versions get it.
-2. Add the trusted publisher (GitHub Actions, repository `edorosh/shell-mcp`,
+2. Push the `v1.0.0` tag. The workflow sees that 1.0.0 is already on npm,
+   skips `npm publish` and creates the GitHub release. The same applies to
+   a rerun of any half-failed release: the publish is skipped when the
+   version already exists, so rerunning is safe.
+3. Add the trusted publisher (GitHub Actions, repository `edorosh/shell-mcp`,
    workflow `release.yml`, no environment), either:
    - on npmjs.com: the package, Settings, Trusted publishing; or
    - from the command line (npm 11.15.0 or newer, 2FA on):
      `npm trust github @edorosh/shell-mcp --file release.yml --repo edorosh/shell-mcp --allow-publish`
-3. The first CI publish must happen within 2 days of adding the trusted
-   publisher, so cut the next release soon after.
+
+   npm requires that "a newly created trusted publisher configuration must
+   complete its first successful publish within 2 days"
+   ([docs](https://docs.npmjs.com/trusted-publishers)). The v1.0.0 tag run
+   publishes nothing, so the first CI publish is the next version: add the
+   trusted publisher only when that release is ready, or within 2 days of it.
 
 ## Each release
 
