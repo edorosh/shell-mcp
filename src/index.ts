@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { ConfigError, parseCli } from "./config.js";
+import { checkRuntime, runtimeLogLine } from "./runtime.js";
 import { ShellService } from "./service.js";
 import { createServer } from "./tools.js";
 import { usage } from "./usage.js";
@@ -60,6 +61,11 @@ async function main(): Promise<void> {
   const service = new ShellService(cfg, backend);
   const server = createServer(cfg, service);
   await server.connect(new StdioServerTransport());
+  // Advisory only and not awaited: a slow or failing check must never delay or stop serving.
+  void checkRuntime(v.sdk).then(
+    (r) => log(runtimeLogLine(r)),
+    (e) => log(`runtime check failed: ${e}`),
+  );
   // The client is gone once stdin ends: exit even if a command or timer is still pending, so
   // orphaned servers do not linger.
   const shutdown = () => {
