@@ -132,8 +132,8 @@ Put `.vscode/mcp.json` in your project (example:
 ### Turning off Copilot's built-in shell
 
 What works depends on where Copilot runs. As of 2026-10-25 the Copilot harness
-hook below is verified with shell-mcp; the Local harness and Copilot CLI options
-are taken from the docs and untested.
+hook below is verified with shell-mcp on Windows; its Linux/macOS script, the
+Local harness and the Copilot CLI options are untested.
 
 **VS Code, Local harness:** in Agent mode, select **Configure Tools** in the
 chat input and deselect the built-in terminal tools (the `execute` group:
@@ -157,17 +157,24 @@ deselected there, and approval settings such as `chat.tools.terminal.autoApprove
 only force a confirmation. Use a `preToolUse` hook instead; Copilot reads
 repository hooks from `.github/hooks/*.json`. Copy
 [examples/copilot/.github/hooks/](examples/copilot/.github/hooks/) into your
-project (`deny-shell.json` plus `deny-shell.ps1`) and reload VS Code. The script
-exits non-zero for the built-in shell tools (`powershell` on Windows, `bash`
+project (`deny-shell.json` plus `deny-shell.ps1` for Windows and
+`deny-shell.sh` for Linux and macOS) and reload VS Code. Copilot runs the json's
+`powershell` command on Windows and its `bash` command elsewhere. Both scripts
+exit non-zero for the built-in shell tools (`powershell` on Windows, `bash`
 elsewhere), which denies the call; every other tool, including shell-mcp's
-(`sandbox-shell` and friends in the hook payload), passes.
+(`sandbox-shell` and friends in the hook payload), passes. Input that cannot be
+parsed is let through. `deny-shell.sh` uses `jq` when it is installed and falls
+back to `sed` otherwise.
 
 Verified on Windows on 2026-10-25 in a Copilot harness session: asked to use
 its built-in terminal, the agent's two `powershell` calls were denied, and it
 then ran `uname -a` through `sandbox-shell` and got Linux. The hook payload
 carries `toolName` and `toolArgs`; to debug, add
 `Add-Content "$env:TEMP\copilot-hook.log" $raw` after the first line of the
-script and read the log.
+script and read the log (in `deny-shell.sh`, add
+`printf '%s\n' "$raw" >> /tmp/copilot-hook.log` after the `raw=` line).
+The Linux/macOS script is untested with Copilot; it was only checked against
+sample payloads from the command line.
 
 **Copilot CLI:** deny the built-in shell and allow the shell-mcp server per
 session (deny rules win over every allow rule, including `--allow-all-tools`):
