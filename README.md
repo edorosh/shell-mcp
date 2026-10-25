@@ -149,6 +149,55 @@ Ask the agent to run `uname -a`. It should report Linux (the sandbox kernel).
 If it does not report Linux, the agent may still be using a built-in shell; if it fails, check that
 the sandbox is running and reachable.
 
+## Troubleshooting
+
+### `Unable to resolve @typescript/typescript-win32-x64` on `npm run build` or `npm run typecheck`
+
+The project builds with TypeScript 7, which runs a compiler from a per-platform package
+(`@typescript/typescript-<os>-<cpu>`). The lockfile lists all of them, and npm installs only
+the one matching the machine. This error means `node_modules` contains a different platform's
+package, for example `@typescript/typescript-linux-x64`. Check with:
+
+```powershell
+dir node_modules\@typescript
+```
+
+Typical causes: `node_modules` was installed on another OS (for example by copying a folder,
+or from a Linux sandbox sharing the folder), or npm detected the wrong platform on your
+machine. Fix it by reinstalling with the platform stated explicitly:
+
+```powershell
+Remove-Item -Recurse -Force node_modules
+npm ci --os=win32 --cpu=x64
+dir node_modules\@typescript     # should now list typescript-win32-x64
+npm run build
+```
+
+If a plain `npm ci` keeps installing the wrong package, find out why npm thinks it is on
+another platform:
+
+```powershell
+node -p "process.platform + ' ' + process.arch"      # expect: win32 x64
+where.exe node                                       # a Windows install, not a WSL or Git Bash shim
+npm config get os
+npm config get cpu
+Get-ChildItem Env: | Where-Object Name -like 'npm_config*'
+Get-Content $HOME\.npmrc -ErrorAction SilentlyContinue
+```
+
+An `os` or `cpu` setting, an `npm_config_os`/`npm_config_cpu` variable, or an `.npmrc` line that
+names `linux` is the override: remove it. As a last resort, pin the platform in your **user**
+npm config (not in the repository, because Linux CI needs the default):
+
+```powershell
+npm config set os win32
+npm config set cpu x64
+```
+
+The same wrong-platform install would also break the native `microsandbox` package, so fix it
+before running the spike or the integration suite. Do not install dependencies in a folder that
+a Linux sandbox shares with your Windows checkout; use a separate clone for each.
+
 ## Limitations
 
 - No interactive programs: stdin is closed for every command.
