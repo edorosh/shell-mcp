@@ -1,0 +1,8 @@
+{
+  "name": "shell-mcp-spike",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "microsandbox": "0.7.11"
+  }
+}
