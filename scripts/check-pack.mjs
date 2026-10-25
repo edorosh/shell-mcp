@@ -23,10 +23,12 @@ function check(cond, msg) {
   ok(msg);
 }
 
-// npm and npx are .cmd files on Windows, so they need a shell there.
+// npm and npx are .cmd files on Windows, so they need a shell there. The shell gets one
+// quoted command line (Node deprecates passing an args array with shell: true, DEP0190).
 function run(cmd, args, cwd) {
-  const argv = isWin ? args.map((a) => (/[\s"]/.test(a) ? `"${a.replaceAll('"', '\\"')}"` : a)) : args;
-  const r = spawnSync(cmd, argv, {
+  const quote = (a) => (/[\s"]/.test(a) ? `"${a.replaceAll('"', '\\"')}"` : a);
+  const [file, argv] = isWin ? [[cmd, ...args].map(quote).join(" "), []] : [cmd, args];
+  const r = spawnSync(file, argv, {
     cwd,
     encoding: "utf8",
     shell: isWin,
