@@ -71,7 +71,8 @@ The values to give shell-mcp are the sandbox name (`myproj`), the host folder
 ## Check
 
 Run shell-mcp once with `--check` before configuring a client. It verifies the
-native module, the runtime version and that the sandbox is reachable:
+native module, the runtime version, that the sandbox is reachable, that the
+shell runs and that the host folder is mounted at the guest path:
 
 ```powershell
 npx -y @edorosh/shell-mcp@1.0.0 --sandbox myproj --host-root C:\Users\eugen\dev\myproj --guest-root /workspace --check
@@ -247,7 +248,7 @@ Flags win over environment variables.
 | `--shell` | `SHELL_MCP_SHELL` | `bash` |
 | `--version` | none | prints the version and exits |
 | `--help` | none | prints usage and exits |
-| `--check` | none | verifies native module, runtime version and sandbox, then exits |
+| `--check` | none | verifies native module, runtime version, sandbox, shell and mount, then exits |
 
 `--host-root` must be an absolute path. It is normalized (`path.win32.normalize`:
 `/` becomes `\`, `.` and `..` segments are collapsed), a trailing separator is
@@ -263,7 +264,6 @@ other value leaves it on; the flag wins over the variable.
 Ask the agent to run `uname -a`. It should report Linux (the sandbox kernel).
 If it does not report Linux, the agent may still be using a built-in shell; if it fails, check that
 the sandbox is running and reachable.
-
 
 ## Client timeouts
 
@@ -396,6 +396,7 @@ node sdk-check.mjs spike *>&1 | Tee-Object -FilePath spike-output.txt
 ```
 
 ### `Unable to resolve @typescript/typescript-win32-x64` on `npm run build` or `npm run typecheck`
+
 The project builds with TypeScript 7, which runs a compiler from a per-platform package
 (`@typescript/typescript-<os>-<cpu>`). The lockfile lists all of them, and npm installs only
 the one matching the machine. This error means `node_modules` contains a different platform's
