@@ -29,8 +29,10 @@ async function check(label, fn) {
   }
 }
 const evShape = (ev) =>
-  ev == null
-    ? { event: ev }
+  ev === null
+    ? { event: "NULL", endOfStream: true }
+    : ev === undefined
+    ? { event: "UNDEFINED", undefinedEvent: true }
     : { kind: ev.kind, typeofData: typeof ev.data, isBuffer: Buffer.isBuffer(ev.data), isU8: ev.data instanceof Uint8Array,
         text: ev.data != null && typeof ev.data === "object" ? dec(ev.data) : undefined, code: ev.code, pid: ev.pid, keys: Object.keys(ev) };
 function pgrep(pattern) {
@@ -63,7 +65,8 @@ const { Sandbox } = sdk;
 let sb;
 const guestPgrep = async (pattern) => {
   const r = await sb.shell(`pgrep -f '${pattern}'; echo rc=$?`);
-  return { stdout: r.stdout?.() ?? r.stdout, code: r.code ?? r.exitCode };
+  const out = typeof r.stdout === "function" ? r.stdout() : r.stdout;
+  return { stdout: out, code: typeof r.code === "function" ? r.code() : (r.code ?? r.exitCode) };
 };
 
 // 1. get + connect
@@ -94,17 +97,17 @@ const consume = async (handle, label, extra = {}) => {
     for (;;) {
       const ev = await handle.recv();
       events.push({ atMs: Date.now() - t0, ...evShape(ev) });
-      if (ev == null) break;
+      if (ev === null) break; // only null ends the stream; undefined is recorded and iteration continues
     }
   } catch (e) { thrown = errInfo(e); }
   const exitedIdx = events.findIndex((e) => e.kind === "exited");
-  const afterExited = exitedIdx >= 0 ? events.slice(exitedIdx + 1).filter((e) => e.event === undefined && (e.kind === "stdout" || e.kind === "stderr")) : [];
+  const afterExited = exitedIdx >= 0 ? events.slice(exitedIdx + 1).filter((e) => (e.kind === "stdout" || e.kind === "stderr")) : [];
   show(label, {
     events, thrown, totalMs: Date.now() - t0,
     endedWithExited: exitedIdx >= 0,
     // Assumption 1: timed-out stream ends with `exited`, no ExecTimeoutError from recv, no output after exited.
     outputAfterExited: afterExited.length,
-    nullOrUndefinedEvents: events.filter((e) => e.event === null || e.event === undefined).length,
+    undefinedEvents: events.filter((e) => e.undefinedEvent).length,
     ...extra,
   });
 };

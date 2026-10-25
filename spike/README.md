@@ -31,7 +31,7 @@ also runs `pgrep` inside the guest, which is the one that counts. In the guest o
 
 ## Paste back
 
-1. The full contents of `spike\spike-output.txt` (or the console output).
+1. The full contents of `spike\spike-output-stopped.txt` (or the console output).
 2. `msb --version` and the SDK version (printed under `### 7 versions`).
 3. Whether `import("microsandbox")` loaded on Windows (`### 0 load` line), or the load error.
 4. Any check that printed `UNCAUGHT`.

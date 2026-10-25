@@ -18,7 +18,12 @@ const ALLOW_STOP = env.SHELL_MCP_IT_ALLOW_STOP === "1";
 describe.skipIf(!ENABLED)("acceptance criteria (section 13)", () => {
   const sandbox = env.SHELL_MCP_IT_SANDBOX ?? "";
   const hostBase = env.SHELL_MCP_IT_HOST_ROOT ?? "";
-  const guestBase = env.SHELL_MCP_IT_GUEST_ROOT ?? "/workspace";
+  const guestBase = env.SHELL_MCP_IT_GUEST_ROOT ?? "";
+  if (ENABLED && (!hostBase || !guestBase)) {
+    throw new Error(
+      "SHELL_MCP_IT_SANDBOX is set, so SHELL_MCP_IT_HOST_ROOT and SHELL_MCP_IT_GUEST_ROOT are also required",
+    );
+  }
 
   let scratch = ""; // directory name under the host root
   let hostDir = ""; // host path of the scratch dir
@@ -38,6 +43,12 @@ describe.skipIf(!ENABLED)("acceptance criteria (section 13)", () => {
     backend = new MicrosandboxBackend(cfg.sandbox, cfg.shell, cfg.maxOutput);
     svc = new ShellService(cfg, backend);
     return cfg;
+  };
+  // Fresh service (own connection state) inside the scratch dir.
+  const fresh = async (extra: string[] = []) => {
+    make(extra);
+    const r = await svc.shell({ command: `cd ${scratch}` });
+    expect(r.isError, r.text).toBe(false);
   };
   const body = (text: string) => text.slice(text.indexOf("\n---\n") + 5);
   const head = (text: string) => text.split("\n")[0];
@@ -80,6 +91,8 @@ describe.skipIf(!ENABLED)("acceptance criteria (section 13)", () => {
   });
 
   it("3. `cd src` then `pwd` reports the guest path of src; cwd shows the host path of src", async () => {
+    // Path rewriting off, so `pwd` shows the guest path while the cwd header shows the host path.
+    await fresh(["--no-rewrite-output-paths"]);
     fs.mkdirSync(path.join(hostDir, "src"));
     const a = await svc.shell({ command: "cd src" });
     expect(a.isError).toBe(false);
@@ -174,16 +187,24 @@ describe.skipIf(!ENABLED)("acceptance criteria (section 13)", () => {
 
   it.skipIf(!ALLOW_STOP)("10. with the sandbox stopped, shell errors naming it and how to start it; after start the next call succeeds", async () => {
     execFileSync("msb", ["stop", sandbox], { stdio: "inherit" });
+    // A server started while the sandbox is stopped (no cached connection from beforeEach).
+    make();
+    const stoppedSvc = svc;
     try {
-      const r = await svc.shell({ command: "echo hi" });
+      const r = await stoppedSvc.shell({ command: "echo hi" });
       expect(r.isError).toBe(true);
       expect(r.text).toContain(sandbox);
       expect(r.text).toContain(`msb start ${sandbox}`);
     } finally {
       execFileSync("msb", ["start", sandbox], { stdio: "inherit" });
     }
-    // Same ShellService/backend instance: no restart of the server.
-    const ok = await svc.shell({ command: "echo hi" });
+    // Same service instance: the next call succeeds without restarting the server.
+    // Poll for up to ~30 s while the sandbox becomes connectable.
+    let ok = await stoppedSvc.shell({ command: "echo hi" });
+    for (let i = 0; i < 15 && ok.isError; i++) {
+      await new Promise((res) => setTimeout(res, 2000));
+      ok = await stoppedSvc.shell({ command: "echo hi" });
+    }
     expect(ok.isError, ok.text).toBe(false);
     expect(body(ok.text).trim()).toBe("hi");
   }, 180_000);
@@ -195,6 +216,7 @@ describe.skipIf(!ENABLED)("acceptance criteria (section 13)", () => {
   });
 
   it("12. deleting the current directory from the host, then `pwd`, runs in the guest root and reports the reset", async () => {
+    await fresh(["--no-rewrite-output-paths"]);
     fs.mkdirSync(path.join(hostDir, "gone"));
     const a = await svc.shell({ command: "cd gone" });
     expect(a.isError).toBe(false);
@@ -202,6 +224,7 @@ describe.skipIf(!ENABLED)("acceptance criteria (section 13)", () => {
     const r = await svc.shell({ command: "pwd" });
     expect(r.isError).toBe(false);
     expect(body(r.text).trim()).toBe(guestBase.replace(/\/+$/, "") || "/");
+    expect(cwdLine(r.text)).toBe(`cwd: ${hostRoot}`);
     expect(r.text).toContain("previous directory no longer existed; ran in workspace root");
   });
 });
