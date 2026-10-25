@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "hooks": {
+    "preToolUse": [
+      {
+        "type": "command",
+        "powershell": "powershell -NoProfile -ExecutionPolicy Bypass -File .github/hooks/deny-shell.ps1",
+        "bash": "exit 2"
+      }
+    ]
+  }
+}

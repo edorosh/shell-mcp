@@ -131,9 +131,9 @@ Put `.vscode/mcp.json` in your project (example:
 
 ### Turning off Copilot's built-in shell
 
-Copilot has no project-level equivalent of Claude Code's `deny` rule, and what
-works depends on where Copilot runs. Status as of 2026-10-25; only the
-`.vscode/mcp.json` setup above has been tested with shell-mcp.
+What works depends on where Copilot runs. As of 2026-10-25 the Copilot harness
+hook below is verified with shell-mcp; the Local harness and Copilot CLI options
+are taken from the docs and untested.
 
 **VS Code, Local harness:** in Agent mode, select **Configure Tools** in the
 chat input and deselect the built-in terminal tools (the `execute` group:
@@ -153,28 +153,21 @@ Run every command through the sandbox shell tools. Use the file tools with host 
 
 **VS Code, Copilot harness (Agent Host):** the harness's built-in tools are
 read-only in the Agent Customizations **Tools** tab, so the shell cannot be
-deselected there, and the docs do not promise that custom agent `tools` lists
-apply. Approval settings such as `chat.tools.terminal.autoApprove` only force a
-confirmation; they do not block commands. The one documented way to block a
-tool call is a `preToolUse` hook. Copilot reads repository hooks from
-`.github/hooks/*.json`; its shell tools (`bash`, `powershell`) match the
-Claude-style name `Bash`, and a command `preToolUse` hook that exits non-zero
-denies the call. Untested sketch, `.github/hooks/deny-shell.json`:
+deselected there, and approval settings such as `chat.tools.terminal.autoApprove`
+only force a confirmation. Use a `preToolUse` hook instead; Copilot reads
+repository hooks from `.github/hooks/*.json`. Copy
+[examples/copilot/.github/hooks/](examples/copilot/.github/hooks/) into your
+project (`deny-shell.json` plus `deny-shell.ps1`) and reload VS Code. The script
+exits non-zero for the built-in shell tools (`powershell` on Windows, `bash`
+elsewhere), which denies the call; every other tool, including shell-mcp's
+(`sandbox-shell` and friends in the hook payload), passes.
 
-```json
-{
-  "version": 1,
-  "hooks": {
-    "PreToolUse": [
-      { "matcher": "Bash", "hooks": [ { "type": "command", "command": "echo Use the sandbox shell tool instead 1>&2 & exit 2" } ] }
-    ]
-  }
-}
-```
-
-GitHub documents hooks for Copilot CLI and the cloud agent; whether the VS Code
-Agent Host runs them is unconfirmed. Check by asking the agent to run
-`uname -a` with its built-in shell: the call should be blocked.
+Verified on Windows on 2026-10-25 in a Copilot harness session: asked to use
+its built-in terminal, the agent's two `powershell` calls were denied, and it
+then ran `uname -a` through `sandbox-shell` and got Linux. The hook payload
+carries `toolName` and `toolArgs`; to debug, add
+`Add-Content "$env:TEMP\copilot-hook.log" $raw` after the first line of the
+script and read the log.
 
 **Copilot CLI:** deny the built-in shell and allow the shell-mcp server per
 session (deny rules win over every allow rule, including `--allow-all-tools`):
