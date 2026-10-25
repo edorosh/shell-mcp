@@ -38,6 +38,24 @@ building the repo.
 - Update the README and client setup snippets (Claude Code, GitHub Copilot) to
   use the published package.
 
+## v3: Sandbox created from the MCP config
+
+Status: idea.
+
+Goal: shell-mcp creates and starts its microsandbox machine when the MCP server
+starts, so the user no longer prepares a sandbox by hand. This takes on
+sandbox lifecycle management (N1).
+
+- Define the machine in the MCP server config: image, mounts (host folder to
+  sandbox path), network rules, and resources such as CPU and memory.
+- On startup, create the sandbox from that definition, or reuse one that
+  already matches it; stop it when the server exits.
+- Path translation (G3) follows the configured mounts instead of a separate
+  mapping.
+- Open questions: start-up time on the first tool call, what happens to a
+  running machine when the config changes, and whether data in the sandbox
+  survives a restart.
+
 ## Later (unscheduled)
 
 Deferred by the v1 spec. None of these is committed to a milestone yet.
@@ -45,5 +63,4 @@ Deferred by the v1 spec. None of these is committed to a milestone yet.
 - Linux and macOS hosts (N6).
 - Backends other than microsandbox, e.g. Docker sbx (N5).
 - More than one sandbox per instance, or switching sandboxes at runtime (N2).
-- Sandbox lifecycle management: create, start, stop, delete (N1).
 - Interactive programs that need a terminal (N3).
