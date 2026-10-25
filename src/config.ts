@@ -103,3 +103,22 @@ export function parseConfig(
     rewriteOutputPaths, shell: pick("shell", "SHELL_MCP_SHELL") ?? "bash", platform,
   };
 }
+
+export type Cli =
+  | { mode: "help" }
+  | { mode: "version" }
+  | { mode: "check"; config: Config }
+  | { mode: "serve"; config: Config };
+
+/** Pick the mode: --help > --version > --check > serve. Help and version ignore everything else. */
+export function parseCli(
+  argv: string[],
+  env: Record<string, string | undefined>,
+  opts?: Parameters<typeof parseConfig>[2],
+): Cli {
+  if (argv.includes("--help")) return { mode: "help" };
+  if (argv.includes("--version")) return { mode: "version" };
+  const check = argv.includes("--check");
+  const config = parseConfig(check ? argv.filter((a) => a !== "--check") : argv, env, opts);
+  return check ? { mode: "check", config } : { mode: "serve", config };
+}

@@ -4,10 +4,10 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { MicrosandboxBackend } from "./backend/microsandbox.js";
-import { ConfigError, parseConfig } from "./config.js";
+import { ConfigError, parseCli } from "./config.js";
 import { ShellService } from "./service.js";
 import { createServer } from "./tools.js";
+import { usage } from "./usage.js";
 
 // stdout carries MCP only; every diagnostic goes to stderr.
 const log = (msg: string) => process.stderr.write(`shell-mcp: ${msg}\n`);
@@ -28,9 +28,9 @@ function versions(): { self: string; sdk: string } {
 }
 
 async function main(): Promise<void> {
-  let cfg;
+  let cli;
   try {
-    cfg = parseConfig(process.argv.slice(2), process.env);
+    cli = parseCli(process.argv.slice(2), process.env);
   } catch (e) {
     if (e instanceof ConfigError) {
       log(e.message);
@@ -39,7 +39,23 @@ async function main(): Promise<void> {
     throw e;
   }
   const v = versions();
+  if (cli.mode === "help") {
+    process.stdout.write(usage());
+    return;
+  }
+  if (cli.mode === "version") {
+    process.stdout.write(`shell-mcp ${v.self} (microsandbox SDK ${v.sdk})\n`);
+    return;
+  }
+  if (cli.mode === "check") {
+    // Placeholder until the check mode lands.
+    log("--check is not implemented yet");
+    process.exit(1);
+  }
+  const cfg = cli.config;
   log(`version ${v.self}, microsandbox SDK ${v.sdk}, sandbox "${cfg.sandbox}"`);
+  // Loaded only when serving, so --help and --version never touch the native module.
+  const { MicrosandboxBackend } = await import("./backend/microsandbox.js");
   const backend = new MicrosandboxBackend(cfg.sandbox, cfg.shell, cfg.maxOutput);
   const service = new ShellService(cfg, backend);
   const server = createServer(cfg, service);
