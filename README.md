@@ -17,7 +17,8 @@ v1, Windows hosts only, not published to npm; see [Status](#status).
 - Node.js 22 or newer.
 - The `msb` runtime at the version matching the pinned SDK. This repo pins
   `microsandbox` (npm SDK) at exactly **0.7.11**. The SDK and `msb` must match;
-  the tested pair is recorded after the spike runs. At startup the server logs
+  the tested pair is **`microsandbox` 0.7.11 with `msb` 0.7.11** on Windows (see
+  [spike-results.md](docs/superpowers/specs/spike-results.md)). At startup the server logs
   its own and the SDK version to stderr.
 - A sandbox you have already created (shell-mcp never creates or starts one).
 - `bash` installed in the sandbox image. The configured shell (default `bash`)
@@ -170,19 +171,21 @@ the sandbox is running and reachable.
   does not pass the signal number through.
 - If the sandbox never confirms the exit after a timeout kill, the result still
   says `timed out` and adds a note that the exit was not confirmed.
-- Maintainer note (not a user-facing promise): timeout detection relies on the
-  sandbox reporting exit code -1 when the SDK's deadline kills the shell, with
-  shell-mcp's own kill half a second past the deadline as a fallback. The -1
-  comes from reading the SDK source and is to be confirmed by the spike.
-- Maintainer note: the other SDK behaviors the backend assumes (error codes,
-  cursor semantics, process-group kill, behavior on Windows) are likewise
-  unconfirmed until the spike runs.
+- Timeout detection relies on the sandbox reporting exit code -1 when the SDK's
+  deadline kills the shell. The spike confirmed this on Windows with `msb` 0.7.11
+  (output produced before the deadline is kept and the process group dies).
+  shell-mcp's own kill half a second past the deadline is only a fallback.
+- Not yet verified on a real host: the error for a stopped sandbox with a cached
+  connection (acceptance criterion 10) and the `output_gap`/`launch_unconfirmed`
+  error paths. The integration suite is meant to cover the first.
 
 ## Status
 
-The microsandbox SDK spike (`spike/`) and the integration suite
-(`test/integration.test.ts`) have **not yet been run on a real host**. The unit
-tests pass against a mocked backend only. Behaviors that depend on the real
+The microsandbox SDK spike (`spike/`) has been run on Windows (results in
+[spike-results.md](docs/superpowers/specs/spike-results.md)). The integration
+suite (`test/integration.test.ts`) has been run once on Windows: criteria 1–9 and
+11 pass, criterion 10 is not yet run, and criterion 12 (deleting the current
+directory from the host) fails; see spike-results.md. Behaviors that depend on the real
 SDK are listed under [Limitations](#limitations). Linux and macOS hosts are
 deferred; see [ROADMAP.md](ROADMAP.md).
 
