@@ -222,6 +222,18 @@ describe("MicrosandboxBackend cached connection to a since-stopped sandbox", () 
     return t;
   }
 
+  it("treats the SDK's GenericFailure on a held connection as a lost connection (stopped sandbox, then restarted)", async () => {
+    const { be, sb, calls, ctl } = await cached();
+    sb.execError = new SdkErr("GenericFailure", "[AgentClient] agent client error: connect \\\\.\\pipe\\msb-agent-1: file not found (os error 2)");
+    ctl.status = "stopped";
+    await expect(be.run("x", { timeoutMs: 1000 })).rejects.toMatchObject({ kind: "not_running" });
+    // The held connection was dropped, so after the restart the next call reconnects and works.
+    sb.execError = undefined;
+    ctl.status = "running";
+    await be.run("x", { timeoutMs: 1000 });
+    expect(calls.connect).toBe(2);
+  });
+
   it("re-checks the sandbox and maps an exec connection error to not_running", async () => {
     const { be, sb, calls, ctl } = await cached();
     sb.execError = new SdkErr("io", "broken pipe");

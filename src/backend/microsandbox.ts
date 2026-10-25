@@ -78,7 +78,9 @@ const msgOf = (e: unknown): string => (e instanceof Error ? e.message : String(e
 
 const NOT_FOUND = new Set(["sandboxNotFound"]);
 const NOT_RUNNING = new Set(["sandboxNotRunning", "sandbox_not_running"]);
-const CONNECTION = new Set(["io", "http", "cloudHttp", "protocol", "runtime", "sandbox_error", "sandboxReplaced"]);
+// GenericFailure is napi's catch-all code; the SDK raises it for a held connection to a sandbox that
+// has since stopped ("[AgentClient] agent client error: connect \\.\pipe\msb-agent-…", seen on Windows).
+const CONNECTION = new Set(["io", "http", "cloudHttp", "protocol", "runtime", "sandbox_error", "sandboxReplaced", "GenericFailure"]);
 
 const isHigh = (c: number) => c >= 0xd800 && c <= 0xdbff;
 const isLow = (c: number) => c >= 0xdc00 && c <= 0xdfff;
