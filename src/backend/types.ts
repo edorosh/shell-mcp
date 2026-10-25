@@ -5,6 +5,8 @@ export interface RunResult {
   exitCode: number | null;
   timedOut: boolean;
   droppedChars: number;
+  /** timedOut only: the kill was sent but the process exit was never confirmed. */
+  exitUnconfirmed?: boolean;
 }
 
 export type JobState = "running" | "exited" | "lost" | "unknown";

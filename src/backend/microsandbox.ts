@@ -5,10 +5,12 @@
  * Assumptions to verify in the Task 1 spike:
  *  - A timed-out execStream is SIGKILLed by the SDK and ends with a raw "exited" event whose code is
  *    -1 (agentd exit_code() for a non-normal exit), not an ExecTimeoutError (only wait()/collect()).
- *    Timed out = code -1 after the deadline, or our backstop/ExecTimeoutError.
+ *    We do not rely on that alone: half a second past the deadline we kill the exec ourselves,
+ *    wait a short grace for "exited", and report a timeout with the captured output either way.
  *  - No stdout/stderr events arrive after "exited"; we stop reading there.
  *  - A spawn failure (native "failed" event) normalizes to undefined and the stream ends without
- *    "exited"; we report not_started. stdin_error (also undefined) is non-terminal.
+ *    "exited"; we report not_started if nothing showed the process started (no "started" or
+ *    output), else outcome_unknown. stdin_error (also undefined) is non-terminal.
  *  - Sandbox.get() rejects with code "sandboxNotFound"; SandboxHandle.status is "running" when usable.
  *  - Job codes: "job_not_found", "job_not_running" (kill after exit), "launch_unconfirmed",
  *    "output_gap" (logs({fromCursor}) after the cursor's records expired), "sandbox_not_running".
@@ -62,8 +64,10 @@ export interface SdkModule {
 export interface MicrosandboxDeps {
   loadSdk?: () => Promise<SdkModule>;
   now?: () => number;
-  /** How long past the deadline (or an abort) to wait for the stream to end before giving up. */
+  /** After our own kill (deadline or abort), how long to wait for "exited" before giving up. */
   graceMs?: number;
+  /** How long past the deadline to wait for the SDK's own timeout before killing ourselves. */
+  killDelayMs?: number;
 }
 
 const codeOf = (e: unknown): string | undefined => {
@@ -138,6 +142,7 @@ export class MicrosandboxBackend implements Backend {
   private readonly loadSdk: () => Promise<SdkModule>;
   private readonly now: () => number;
   private readonly graceMs: number;
+  private readonly killDelayMs: number;
 
   constructor(
     private readonly sandboxName: string,
@@ -148,7 +153,8 @@ export class MicrosandboxBackend implements Backend {
     // Lazy: loading the native module is deferred until the first tool call.
     this.loadSdk = deps.loadSdk ?? (() => import("microsandbox"));
     this.now = deps.now ?? Date.now;
-    this.graceMs = deps.graceMs ?? 10_000;
+    this.graceMs = deps.graceMs ?? 2_500;
+    this.killDelayMs = deps.killDelayMs ?? 500;
   }
 
   async run(script: string, opts: { timeoutMs: number; signal?: AbortSignal }): Promise<RunResult> {
@@ -171,7 +177,8 @@ export class MicrosandboxBackend implements Backend {
     let exited = false;
     let execTimeout = false;
     let unknownEvent = false;
-    let failure: string | undefined;
+    let sawActivity = false; // "started" or output: a process exists
+    let weKilled = false; // our deadline kill fired
 
     // A stop request wakes the pending recv; each iteration's promise is fresh, so nothing accumulates.
     let stopped: Stop | undefined;
@@ -181,7 +188,14 @@ export class MicrosandboxBackend implements Backend {
       wake?.(s);
     };
     const kill = () => void handle.kill().catch(() => {});
-    const timers = [setTimeout(() => requestStop("deadline"), timeoutMs + this.graceMs)];
+    // Our own deadline: kill shortly after the SDK's timeout should have, then give it a grace.
+    const timers = [
+      setTimeout(() => {
+        weKilled = true;
+        kill();
+        timers.push(setTimeout(() => requestStop("deadline"), this.graceMs));
+      }, timeoutMs + this.killDelayMs),
+    ];
     const onAbort = () => {
       kill();
       timers.push(setTimeout(() => requestStop("abort"), this.graceMs));
@@ -198,18 +212,20 @@ export class MicrosandboxBackend implements Backend {
         wake = undefined;
         if (ev === null) break;
         if (typeof ev === "string") break;
-        if (ev?.kind === "stdout" || ev?.kind === "stderr") {
+        if (ev?.kind === "started") {
+          sawActivity = true;
+        } else if (ev?.kind === "stdout" || ev?.kind === "stderr") {
+          sawActivity = true;
           acc[ev.kind].push(ev.data);
           out.append(acc[ev.kind].drain());
         } else if (ev?.kind === "exited") {
           exitCode = ev.code;
           exited = true;
           break;
-        } else if (ev?.kind !== "started") {
-          // The TS SDK normalizes native "failed"/"stdin_error" events to undefined; keep going.
+        } else {
+          // The TS SDK normalizes native "failed"/"stdin_error" events to undefined (no payload
+          // survives), so all we can record is that one occurred; keep reading.
           unknownEvent = true;
-          const raw = ev as { kind?: string; data?: Uint8Array } | undefined;
-          if (raw?.kind === "failed") failure = raw.data ? new TextDecoder().decode(raw.data) : "spawn failed";
         }
       }
     } catch (e) {
@@ -223,7 +239,7 @@ export class MicrosandboxBackend implements Backend {
 
     out.append(acc.stdout.finish());
     out.append(acc.stderr.finish());
-    const deadlinePassed = stopped === "deadline" || this.now() - start >= timeoutMs;
+    const deadlinePassed = weKilled || this.now() - start >= timeoutMs;
     const result = (exit: number | null, timedOut: boolean): RunResult => ({
       output: out.text(), exitCode: exit, timedOut, droppedChars: out.dropped,
     });
@@ -231,17 +247,19 @@ export class MicrosandboxBackend implements Backend {
     // execTimeout: the SDK confirmed the exit after its deadline kill.
     if (execTimeout) return result(null, true);
     if (exited) {
-      // agentd reports -1 for a signal death; the SDK's deadline kill is SIGKILL.
-      const killedByDeadline = exitCode === -1 && deadlinePassed;
+      // agentd reports -1 for a signal death; the SDK's deadline kill is SIGKILL. After our own
+      // kill, any non-zero exit is the kill; an exit 0 means it finished on its own just in time.
+      const killedByDeadline = deadlinePassed && (exitCode === -1 || (weKilled && exitCode !== 0));
       return killedByDeadline ? result(null, true) : result(exitCode, false);
     }
+    // We killed at the deadline and no exit came within the grace: still a timeout (S5), with
+    // the output captured so far, flagged so the agent knows the exit was not confirmed.
+    if (stopped === "deadline") return { ...result(null, true), exitUnconfirmed: true };
     if (deadlinePassed) {
       throw new BackendError("outcome_unknown", `the ${timeoutMs} ms deadline passed but the process exit was not confirmed`);
     }
     if (signal?.aborted) return result(null, false);
-    if (failure !== undefined || unknownEvent) {
-      throw new BackendError("not_started", `the command failed to start${failure ? `: ${failure}` : ""}`);
-    }
+    if (unknownEvent && !sawActivity) throw new BackendError("not_started", "the command failed to start");
     throw new BackendError("outcome_unknown", "the command's output stream ended without an exit status");
   }
 

@@ -65,6 +65,7 @@ export class ShellService {
         : `exit code: ${res.exitCode ?? "unknown"}`;
       let text = `${head}\ncwd: ${this.paths.displayCwd(this.guestCwd)}\n`;
       if (ex.reset) text += "note: previous directory no longer existed; ran in workspace root\n";
+      if (res.timedOut && res.exitUnconfirmed) text += "note: kill sent, but the process exit was not confirmed\n";
       text += `---\n${t.text}`;
       return { text, isError: false };
     } catch (e) {

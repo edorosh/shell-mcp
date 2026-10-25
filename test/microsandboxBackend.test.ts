@@ -20,7 +20,8 @@ class SdkErr extends Error {
 }
 
 interface ExecScript {
-  events: (SdkExecEvent | SdkErr | "hang" | undefined | { kind: "failed"; data?: Uint8Array })[];
+  /** "hang": never resolves. "untilKill": resolves with exited 137 once kill() is called. */
+  events: (SdkExecEvent | SdkErr | "hang" | "untilKill" | undefined)[];
 }
 
 function info(over: Partial<SdkJobInfo> = {}): SdkJobInfo {
@@ -74,16 +75,20 @@ class FakeSandbox implements SdkSandbox {
     this.execs.push({ cmd, ...rec });
     if (this.execError) throw this.execError;
     const events = [...this.script.events];
+    let onKill: (() => void) | undefined;
     return {
       recv: async () => {
         this.onRecv?.();
         if (events.length === 0) return null;
         const e = events.shift();
         if (e === "hang") return new Promise<never>(() => {});
+        if (e === "untilKill") {
+          return new Promise<SdkExecEvent>((res) => { onKill = () => res({ kind: "exited", code: 137 }); });
+        }
         if (e instanceof SdkErr) throw e;
         return e as SdkExecEvent | undefined;
       },
-      kill: async () => { this.killedExec++; },
+      kill: async () => { this.killedExec++; onKill?.(); },
     };
   }
 
@@ -104,7 +109,10 @@ class FakeSandbox implements SdkSandbox {
   }
 }
 
-function setup(opts: { status?: string; getError?: SdkErr; connectError?: SdkErr; maxOutput?: number; clock?: number[]; graceMs?: number } = {}) {
+function setup(opts: {
+  status?: string; getError?: SdkErr; connectError?: SdkErr; maxOutput?: number; clock?: number[];
+  graceMs?: number; killDelayMs?: number;
+} = {}) {
   const sb = new FakeSandbox();
   const calls = { get: 0, connect: 0, load: 0 };
   // Mutable so a test can stop or remove the sandbox after the first connection.
@@ -135,6 +143,7 @@ function setup(opts: { status?: string; getError?: SdkErr; connectError?: SdkErr
     },
     now: clock ? () => (clock.length > 1 ? clock.shift()! : clock[0]!) : undefined,
     graceMs: opts.graceMs,
+    killDelayMs: opts.killDelayMs,
   });
   return { be, sb, calls, ctl };
 }
@@ -371,12 +380,18 @@ describe("MicrosandboxBackend.run", () => {
     expect(calls.connect).toBe(1);
   });
 
-  it("maps a spawn failure (failed event, no exit) to not_started", async () => {
+  it("maps a spawn failure (SDK yields undefined for native \"failed\", then the stream ends) to not_started", async () => {
     const { be, sb } = setup();
     sb.script.events = [undefined];
     expect(await kindOf(be.run("x", { timeoutMs: 1000 }))).toBe("not_started");
-    sb.script.events = [{ kind: "failed", data: enc("bash: not found") }];
-    await expect(be.run("x", { timeoutMs: 1000 })).rejects.toThrow("bash: not found");
+  });
+
+  it("an unknown event after the process started, then a bare end, is outcome_unknown", async () => {
+    const { be, sb } = setup();
+    sb.script.events = [{ kind: "started", pid: 1 }, undefined];
+    expect(await kindOf(be.run("x", { timeoutMs: 1000 }))).toBe("outcome_unknown");
+    sb.script.events = [{ kind: "stdout", data: enc("a") }, undefined];
+    expect(await kindOf(be.run("x", { timeoutMs: 1000 }))).toBe("outcome_unknown");
   });
 
   it("does not launch when the signal aborts before the exec handle exists", async () => {
@@ -435,13 +450,35 @@ describe("MicrosandboxBackend.run", () => {
   });
 });
 
-describe("MicrosandboxBackend.run backstop", () => {
-  it("gives up, kills, and reports an unconfirmed outcome when the stream outlives deadline plus grace", async () => {
-    const { be, sb } = setup({ graceMs: 20 });
+describe("MicrosandboxBackend.run own deadline kill", () => {
+  it("kills at the deadline and keeps partial output when the SDK never reports an exit", async () => {
+    const { be, sb } = setup({ graceMs: 30, killDelayMs: 20 });
     sb.script.events = [{ kind: "stdout", data: enc("stuck") }, "hang"];
-    expect(await kindOf(be.run("x", { timeoutMs: 10 }))).toBe("outcome_unknown");
+    const t0 = Date.now();
+    const r = await be.run("x", { timeoutMs: 10 });
+    expect(Date.now() - t0).toBeLessThan(1000);
+    expect(r).toEqual({ output: "stuck", exitCode: null, timedOut: true, droppedChars: 0, exitUnconfirmed: true });
     expect(sb.killedExec).toBeGreaterThanOrEqual(1);
   });
+
+  it("reports a confirmed timeout when the exit arrives after our kill", async () => {
+    const { be, sb } = setup({ graceMs: 1000, killDelayMs: 10 });
+    sb.script.events = [{ kind: "stdout", data: enc("part") }, "untilKill"];
+    const r = await be.run("x", { timeoutMs: 10 });
+    expect(r).toEqual({ output: "part", exitCode: null, timedOut: true, droppedChars: 0 });
+    expect(sb.killedExec).toBe(1);
+  });
+
+  it("uses about half a second past the deadline and a short grace by default", async () => {
+    const { be, sb } = setup();
+    sb.script.events = ["hang"];
+    const t0 = Date.now();
+    const r = await be.run("x", { timeoutMs: 10 });
+    const took = Date.now() - t0;
+    expect(r).toMatchObject({ timedOut: true, exitUnconfirmed: true });
+    expect(took).toBeGreaterThanOrEqual(400);
+    expect(took).toBeLessThan(5000);
+  }, 10_000);
 
   it("gives up after grace when an aborted run never ends", async () => {
     const { be, sb } = setup({ graceMs: 20 });

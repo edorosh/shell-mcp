@@ -59,6 +59,17 @@ describe("ShellService.shell foreground", () => {
     expect(r.text).not.toContain("exit code:");
   });
 
+  it("notes an unconfirmed exit after a timeout kill, keeping the first line", async () => {
+    const { fb, svc } = setup();
+    fb.queueRun(ok("partial\n", null, { timedOut: true, exitUnconfirmed: true }));
+    const r = await svc.shell({ command: "sleep 999" });
+    expect(r.text.split("\n")[0]).toBe("timed out after 120s (process killed)");
+    expect(r.text).toContain("note: kill sent, but the process exit was not confirmed");
+    expect(r.text).toContain("partial");
+    fb.queueRun(ok("partial\n", null, { timedOut: true }));
+    expect((await svc.shell({ command: "sleep 999" })).text).not.toContain("not confirmed");
+  });
+
   it("notes a reset directory", async () => {
     const { fb, svc } = setup();
     fb.queueRun(ok("__SHELLMCP_RESET_n__\nx\n" + M("/workspace")));
