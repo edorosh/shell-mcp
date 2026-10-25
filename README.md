@@ -313,6 +313,12 @@ Deleting `%LOCALAPPDATA%\npm-cache\_npx`, or an upgrade that replaces it, fails 
 "access denied" on `microsandbox.win32-x64-msvc.node` while a client is
 running shell-mcp (Windows locks loaded DLLs). Close the clients first.
 
+A sandbox created with the packaged runtime (`npx -y -p microsandbox@… msb create`)
+keeps `msb.exe` running from inside that npx cache or `node_modules` folder, so
+`msb.exe` and `libkrunfw.dll` stay locked too. Stop the sandbox first
+(`msb stop <name>` with the same runtime and `MSB_HOME`), or find the process with
+`Get-Process msb | Select-Object Id, Path` and stop it.
+
 ## Limitations
 
 - No interactive programs: stdin is closed for every command.
