@@ -89,7 +89,12 @@ describe("runtimeLogLine", () => {
       "runtime msb unknown from home (/m); n",
     );
   });
-  it("formats a failure", () => {
+  it("keeps origin and path on a mismatch", () => {
+    expect(runtimeLogLine({ ok: false, message: "boom", origin: "home", msbPath: "/m", version: "0.7.9" })).toBe(
+      "runtime msb 0.7.9 from home (/m); warning: boom; run shell-mcp --check",
+    );
+  });
+  it("formats a resolve failure", () => {
     expect(runtimeLogLine({ ok: false, message: "boom" })).toBe("warning: boom; run shell-mcp --check");
   });
 });

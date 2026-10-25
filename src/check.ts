@@ -9,9 +9,12 @@ export interface CheckDeps {
   backend: Backend;
   runtime(): Promise<RuntimeCheck>;
   readdir(p: string): Promise<string[]>;
+  /** Overrides the sandbox step's hard deadline; tests only. */
+  timeoutMs?: number;
 }
 
 const CHECK_TIMEOUT_MS = 30_000;
+class NoResponse extends Error {}
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 function diff(a: string[], b: string[], fold: (s: string) => string): string[] {
@@ -60,9 +63,25 @@ export async function runCheck(config: Config, deps: CheckDeps, write: (line: st
 
   // 4 and 5: one `uname -s` run
   let uname: Awaited<ReturnType<Backend["run"]>> | undefined;
+  const limit = deps.timeoutMs ?? CHECK_TIMEOUT_MS + 5_000;
   try {
-    uname = await deps.backend.run("uname -s", { timeoutMs: CHECK_TIMEOUT_MS });
+    // The backend applies its timeout only after connecting, so guard a connect that never returns.
+    let timer: NodeJS.Timeout | undefined;
+    const noResponse = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new NoResponse()), limit);
+    });
+    try {
+      uname = await Promise.race([deps.backend.run("uname -s", { timeoutMs: CHECK_TIMEOUT_MS }), noResponse]);
+    } finally {
+      clearTimeout(timer);
+    }
   } catch (e) {
+    if (e instanceof NoResponse) {
+      fail("sandbox", `no response within ${Math.round(limit / 1000)}s from "${config.sandbox}"; check the sandbox state`);
+      skipped("shell", "sandbox failed");
+      skipped("mount", "sandbox failed");
+      return 1;
+    }
     if (e instanceof BackendError && e.kind === "not_started") {
       ok("sandbox", `"${config.sandbox}" is running`);
       fail("shell", `${e.message}; is ${config.shell} installed in the image? or set --shell`);

@@ -176,3 +176,19 @@ describe("runCheck", () => {
     expect(line(lines, "mount")).toMatch(/^FAIL.*ENOENT/);
   });
 });
+
+describe("runCheck connect guard", () => {
+  it("fails the sandbox step when the backend never answers", async () => {
+    const fb = new FakeBackend().queueRun(() => new Promise<never>(() => {}));
+    const lines: string[] = [];
+    const deps: CheckDeps = {
+      loadSdk: async () => ({}), backend: fb, runtime: async () => okRuntime, readdir: async () => ["a"], timeoutMs: 20,
+    };
+    const code = await runCheck(cfg(), deps, (l) => lines.push(l));
+    expect(code).toBe(1);
+    expect(line(lines, "sandbox")).toMatch(/^FAIL .*no response within 0s/);
+    expect(line(lines, "shell")).toMatch(/^skipped/);
+    expect(line(lines, "mount")).toMatch(/^skipped/);
+    expect(fb.runs).toHaveLength(1);
+  });
+});

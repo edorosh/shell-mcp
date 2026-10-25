@@ -54,7 +54,10 @@ export async function checkRuntime(sdkVersion: string, deps?: RuntimeDeps): Prom
 }
 
 export function runtimeLogLine(r: RuntimeCheck): string {
-  if (!r.ok) return `warning: ${r.message}; run shell-mcp --check`;
+  if (!r.ok) {
+    const warning = `warning: ${r.message}; run shell-mcp --check`;
+    return r.version && r.origin && r.msbPath ? `runtime msb ${r.version} from ${r.origin} (${r.msbPath}); ${warning}` : warning;
+  }
   const line = `runtime msb ${r.version} from ${r.origin} (${r.msbPath})`;
   return r.note ? `${line}; ${r.note}` : line;
 }

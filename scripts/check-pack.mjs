@@ -94,6 +94,7 @@ try {
     check(version.stdout.trim() === `shell-mcp ${pkg.version} (microsandbox SDK ${sdk})`, `${l.name}: --version prints shell-mcp ${pkg.version} (microsandbox SDK ${sdk})`);
     const help = run(l.cmd, [...l.args, "--help"], projDir);
     check(help.status === 0, `${l.name}: --help exits 0`);
+    check(help.stdout.includes("--sandbox"), `${l.name}: --help lists --sandbox`);
     const bare = run(l.cmd, l.args, projDir);
     check(bare.status === 1, `${l.name}: no-flag run exits 1 (got ${bare.status})`);
     check(bare.stdout === "", `${l.name}: no-flag run writes nothing to stdout`);

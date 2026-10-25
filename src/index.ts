@@ -64,7 +64,10 @@ async function main(): Promise<void> {
       },
       (line) => process.stdout.write(`${line}\n`),
     );
-    process.exit(code);
+    // Exit from the write callback so a TTY has flushed the output; the backend may hold handles.
+    process.exitCode = code;
+    process.stdout.write("", () => process.exit(code));
+    return;
   }
   const cfg = cli.config;
   log(`version ${v.self}, microsandbox SDK ${v.sdk}, sandbox "${cfg.sandbox}"`);
