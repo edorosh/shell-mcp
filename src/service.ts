@@ -1,6 +1,6 @@
-import { type Backend, BackendError } from "./backend/types.js";
+import { type Backend, BackendError, type JobStatus } from "./backend/types.js";
 import type { Config } from "./config.js";
-import { JobRegistry, shortenCommand } from "./jobs.js";
+import { type JobRecord, JobRegistry, shortenCommand } from "./jobs.js";
 import { truncateMiddle } from "./output.js";
 import { PathMapper } from "./paths.js";
 import { extractCwd, newNonce, wrapBackground, wrapForeground } from "./wrap.js";
@@ -85,6 +85,95 @@ export class ShellService {
       };
     } catch (e) {
       return this.errorResult(e);
+    }
+  }
+
+  async output(args: { job_id: string }): Promise<ToolResult> {
+    const rec = this.jobs.get(args.job_id);
+    if (!rec) return this.unknownJob(args.job_id);
+    try {
+      let gap = false;
+      if (rec.pending === "") {
+        const r = await this.backend.readJob(rec.id, rec.cursor);
+        rec.cursor = r.cursor;
+        gap = r.gap;
+        rec.pending = this.cfg.rewriteOutputPaths ? this.paths.rewriteOutput(r.text) : r.text;
+      }
+      const status = await this.backend.jobStatus(rec.id);
+      let cut = Math.min(rec.pending.length, this.cfg.maxOutput);
+      if (cut < rec.pending.length && cut > 0) {
+        const c = rec.pending.charCodeAt(cut - 1);
+        if (c >= 0xd800 && c <= 0xdbff) cut -= 1; // do not split a surrogate pair
+      }
+      const chunk = rec.pending.slice(0, cut);
+      rec.pending = rec.pending.slice(cut);
+      let text = `status: ${this.statusText(rec, status)}\n`;
+      if (gap) text += "[some output was discarded by the sandbox]\n";
+      text += `---\n${chunk}`;
+      if (rec.pending !== "") text += "\n[more output pending; call shell_output again]";
+      return { text, isError: false };
+    } catch (e) {
+      return this.errorResult(e);
+    }
+  }
+
+  async kill(args: { job_id: string }): Promise<ToolResult> {
+    const rec = this.jobs.get(args.job_id);
+    if (!rec) return this.unknownJob(args.job_id);
+    try {
+      const before = await this.backend.jobStatus(rec.id);
+      if (before.state === "exited" || before.state === "lost") {
+        return { text: `job ${rec.id} already finished: ${this.statusText(rec, before)}`, isError: false };
+      }
+      const res = await this.backend.killJob(rec.id, 3000);
+      const st = res.status;
+      if (res.confirmed && st.state === "exited" && (st.exitCode === 0 || st.error !== undefined)) {
+        // The job finished on its own between the status check and the kill.
+        return { text: `job ${rec.id} had already finished: ${this.statusText(rec, st)}`, isError: false };
+      }
+      rec.killedByUs = true;
+      return {
+        text: res.confirmed
+          ? `job ${rec.id} killed (exit confirmed)`
+          : `job ${rec.id}: kill requested; exit not yet confirmed`,
+        isError: false,
+      };
+    } catch (e) {
+      return this.errorResult(e);
+    }
+  }
+
+  async list(): Promise<ToolResult> {
+    const all = this.jobs.list();
+    if (all.length === 0) return { text: "No background jobs started in this session.", isError: false };
+    try {
+      const lines: string[] = [];
+      for (const rec of all) {
+        const st = await this.backend.jobStatus(rec.id);
+        lines.push(`${rec.id}  ${this.statusText(rec, st)}  ${rec.startedAt.toISOString()}  ${rec.command}`);
+      }
+      return { text: lines.join("\n"), isError: false };
+    } catch (e) {
+      return this.errorResult(e);
+    }
+  }
+
+  private unknownJob(id: string): ToolResult {
+    return { text: `unknown job: ${id} (only jobs started by this server can be used)`, isError: true };
+  }
+
+  private statusText(rec: JobRecord, st: JobStatus): string {
+    switch (st.state) {
+      case "running":
+        return "running";
+      case "lost":
+        return "lost";
+      case "unknown":
+        return "unknown";
+      default:
+        if (st.error !== undefined) return `exited (failed to start: ${st.error})`;
+        if (rec.killedByUs) return "killed";
+        return `exited (exit code ${st.exitCode ?? "unknown"})`;
     }
   }
 

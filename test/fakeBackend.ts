@@ -41,13 +41,22 @@ export class FakeBackend implements Backend {
     this.started.push(script);
     return { id: this.nextJobId };
   }
-  async readJob(): Promise<{ text: string; cursor?: string; gap: boolean }> {
-    return { text: "", gap: false };
+  readQueue: Array<{ text: string; cursor?: string; gap?: boolean }> = [];
+  readCalls: Array<{ id: string; cursor?: string }> = [];
+  killCalls: Array<{ id: string; waitMs: number }> = [];
+  killResult: { confirmed: boolean; status: JobStatus } = { confirmed: true, status: { state: "exited", exitCode: 137 } };
+
+  async readJob(id: string, cursor?: string): Promise<{ text: string; cursor?: string; gap: boolean }> {
+    this.readCalls.push({ id, cursor });
+    const n = this.readQueue.shift();
+    if (!n) return { text: "", cursor, gap: false };
+    return { text: n.text, cursor: n.cursor, gap: n.gap ?? false };
   }
   async jobStatus(id: string): Promise<JobStatus> {
     return this.jobStatuses.get(id) ?? { state: "running" };
   }
-  async killJob(id: string): Promise<{ confirmed: boolean; status: JobStatus }> {
-    return { confirmed: true, status: { state: "exited", exitCode: 137 } };
+  async killJob(id: string, waitMs: number): Promise<{ confirmed: boolean; status: JobStatus }> {
+    this.killCalls.push({ id, waitMs });
+    return this.killResult;
   }
 }
