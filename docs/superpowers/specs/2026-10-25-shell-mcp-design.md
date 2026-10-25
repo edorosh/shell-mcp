@@ -19,7 +19,7 @@ how v1 is built. Requirement IDs (S1, P4, ...) refer to the spec.
 | Parallel calls | Run concurrently, last finisher sets cwd | Claude's call |
 | Cancellation | Client cancel kills the sandbox process | Claude's call |
 | Shell | Configured shell only, no `sh` fallback | Claude's call |
-| Packaging | Unpublished in v1; clients run `node <clone>\dist\index.js`. The unscoped npm name `shell-mcp` belongs to an unrelated package, so `npx shell-mcp` must never appear. A later publish uses a scope the user owns | Claude's call |
+| Packaging | Unpublished in v1; clients run `node <clone>\dist\index.js`. The unscoped npm name `shell-mcp` belongs to an unrelated package, so `npx shell-mcp` must never appear. A later publish uses a scope the user owns. Superseded in v2: published as `@edorosh/shell-mcp`, see the [v2 design](2026-10-25-shell-mcp-v2-npm-design.md) | Claude's call |
 | Config | CLI flags, each with an env-var fallback | Claude's call |
 
 Why the SDK over the CLI: passing arbitrary agent commands through
