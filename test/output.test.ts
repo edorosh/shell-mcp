@@ -13,6 +13,22 @@ describe("Utf8Accumulator", () => {
     acc.push(new Uint8Array([0xff]));
     expect(acc.text()).toContain("�");
   });
+  it("text() between halves of a split char does not corrupt it", () => {
+    const acc = new Utf8Accumulator();
+    acc.push(new Uint8Array([0xc3]));
+    expect(acc.text()).toBe("");
+    acc.push(new Uint8Array([0xa9]));
+    expect(acc.text()).toBe("é");
+    acc.push(new Uint8Array([0xe2, 0x82]));
+    expect(acc.text()).toBe("é");
+    acc.push(new Uint8Array([0xac]));
+    expect(acc.text()).toBe("é€");
+  });
+  it("finish() flushes an incomplete sequence", () => {
+    const acc = new Utf8Accumulator();
+    acc.push(new Uint8Array([0xc3]));
+    expect(acc.finish()).toBe("\uFFFD");
+  });
   it("accepts strings", () => {
     const acc = new Utf8Accumulator();
     acc.push("ab");
@@ -47,5 +63,23 @@ describe("truncateMiddle", () => {
     expect(r.text).toContain(`[... ${r.omitted} characters omitted ...]`);
     expect(r.omitted).toBeGreaterThan(1400);
     expect(r.text.length).toBeLessThanOrEqual(100);
+  });
+  it("never exceeds max, even when max is smaller than the marker", () => {
+    for (const max of [0, 1, 5, 20]) {
+      const r = truncateMiddle("x".repeat(500), max);
+      expect(r.text.length).toBeLessThanOrEqual(max);
+      expect(r.omitted).toBe(500);
+    }
+  });
+  it("does not split surrogate pairs", () => {
+    const s = "😀".repeat(500);
+    for (let max = 40; max < 80; max++) {
+      const r = truncateMiddle(s, max);
+      expect(r.text.length).toBeLessThanOrEqual(max);
+      expect(r.text.isWellFormed()).toBe(true);
+      const m = r.text.match(/\[\.\.\. (\d+) characters omitted \.\.\.\]/)!;
+      expect(Number(m[1])).toBe(r.omitted);
+      expect(r.omitted).toBe(1000 - (r.text.length - m[0].length));
+    }
   });
 });

@@ -7,8 +7,15 @@ export class Utf8Accumulator {
     this.buf += typeof chunk === "string" ? chunk : this.decoder.decode(chunk, { stream: true });
   }
 
+  /** Non-destructive: pending partial bytes stay in the decoder for the next push. */
   text(): string {
-    return this.buf + this.decoder.decode();
+    return this.buf;
+  }
+
+  /** End of stream: flush any incomplete sequence (becomes U+FFFD) and return the full text. */
+  finish(): string {
+    this.buf += this.decoder.decode();
+    return this.buf;
   }
 }
 
@@ -25,27 +32,29 @@ export function truncateMiddle(
   alreadyOmitted = 0,
 ): { text: string; omitted: number } {
   if (text.length <= max && alreadyOmitted === 0) return { text, omitted: 0 };
+  const len = text.length;
+  const isHigh = (c: number) => c >= 0xd800 && c <= 0xdbff;
+  const isLow = (c: number) => c >= 0xdc00 && c <= 0xdfff;
 
-  let keep = text.length <= max ? text.length : max;
-  let omitted = alreadyOmitted + text.length - keep;
-  // The marker length depends on the digits of `omitted`, which depends on keep: iterate to a fixed point.
-  for (let i = 0; i < 5; i++) {
-    const next = Math.max(0, Math.min(text.length, max - marker(omitted).length));
-    keep = next;
-    const o = alreadyOmitted + text.length - keep;
-    if (o === omitted) break;
-    omitted = o;
-  }
-  // Guard against a non-converged edge: shrink until it fits.
-  while (keep > 0 && keep + marker(omitted).length > max) {
-    keep--;
-    omitted = alreadyOmitted + text.length - keep;
-  }
-  if (keep >= text.length) return { text: text + marker(omitted), omitted };
-  const head = Math.floor(keep * 0.4);
-  const tail = keep - head;
-  return {
-    text: text.slice(0, head) + marker(omitted) + (tail > 0 ? text.slice(text.length - tail) : ""),
-    omitted,
+  const build = (keep: number): { text: string; omitted: number } => {
+    if (keep >= len) {
+      const omitted = alreadyOmitted;
+      return { text: text + marker(omitted), omitted };
+    }
+    let head = Math.floor(keep * 0.4);
+    let tailStart = len - (keep - head);
+    // Do not split surrogate pairs at either cut point.
+    if (head > 0 && isHigh(text.charCodeAt(head - 1))) head--;
+    if (tailStart < len && isLow(text.charCodeAt(tailStart)) && tailStart > 0 && isHigh(text.charCodeAt(tailStart - 1))) tailStart++;
+    const omitted = alreadyOmitted + (tailStart - head);
+    return { text: text.slice(0, head) + marker(omitted) + text.slice(tailStart), omitted };
   };
+
+  for (let keep = Math.min(len, Math.max(0, max)); keep > 0; keep--) {
+    const r = build(keep);
+    if (r.text.length <= max) return r;
+  }
+  // Budget smaller than the marker itself: hard-slice the marker.
+  const omitted = alreadyOmitted + len;
+  return { text: marker(omitted).slice(0, Math.max(0, max)), omitted };
 }
