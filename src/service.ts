@@ -93,14 +93,18 @@ export class ShellService {
     const rec = this.jobs.get(args.job_id);
     if (!rec) return this.unknownJob(args.job_id);
     try {
+      // Status first, then the log: a job that exits between the two calls still has its last
+      // output in this read, so an "exited" status never comes without the tail.
+      const status = await this.backend.jobStatus(rec.id);
       let gap = false;
-      if (rec.pending === "") {
+      // Read unless a full page is already pending. Then this page cannot empty pending, and
+      // the "more output pending" note keeps the agent polling until the log is read again.
+      if (rec.pending.length <= this.cfg.maxOutput) {
         const r = await this.backend.readJob(rec.id, rec.cursor);
         rec.cursor = r.cursor ?? rec.cursor; // an empty read may omit the cursor; never reset it
         gap = r.gap;
-        rec.pending = this.cfg.rewriteOutputPaths ? this.paths.rewriteOutput(r.text) : r.text;
+        rec.pending += this.cfg.rewriteOutputPaths ? this.paths.rewriteOutput(r.text) : r.text;
       }
-      const status = await this.backend.jobStatus(rec.id);
       let cut = Math.min(rec.pending.length, this.cfg.maxOutput);
       if (cut < rec.pending.length && cut > 0) {
         const c = rec.pending.charCodeAt(cut - 1);

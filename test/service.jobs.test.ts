@@ -57,7 +57,8 @@ describe("output", () => {
     expect(texts[0]).toContain("more output pending; call shell_output again");
     expect(texts[1]).toContain("more output pending; call shell_output again");
     expect(texts[2]).not.toContain("more output pending");
-    expect(fb.readCalls).toHaveLength(1);
+    // The log is not read again while a full page is still pending.
+    expect(fb.readCalls).toHaveLength(2);
   });
 
   it("keeps the cursor across an empty read that omits it", async () => {
@@ -83,6 +84,51 @@ describe("output", () => {
     const { fb, svc } = setup();
     fb.readQueue.push({ text: "x", cursor: "c", gap: true });
     expect((await svc.output({ job_id: "job1" })).text).toContain("[some output was discarded by the sandbox]");
+  });
+
+  it("does not lose the tail when the job exits between the status and log calls", async () => {
+    const { fb, svc } = setup();
+    // The job prints its last line and exits right after the first backend call of a poll.
+    let calls = 0;
+    let log = "first\n";
+    let done = false;
+    const tick = () => {
+      if (calls++ === 1) {
+        log += "tail\n";
+        done = true;
+      }
+    };
+    let pos = 0;
+    fb.readJob = async () => {
+      tick();
+      const text = log.slice(pos);
+      pos = log.length;
+      return { text, cursor: String(pos), gap: false };
+    };
+    fb.jobStatus = async () => {
+      tick();
+      return done ? { state: "exited", exitCode: 0 } : { state: "running" };
+    };
+    // An agent polls until the status says the job is finished and nothing is pending.
+    let seen = "";
+    for (let i = 0; i < 5; i++) {
+      const r = await svc.output({ job_id: "job1" });
+      seen += r.text.split("\n---\n")[1]!;
+      if (r.text.startsWith("status: exited") && !r.text.includes("more output pending")) break;
+    }
+    expect(seen).toContain("first\n");
+    expect(seen).toContain("tail\n");
+  });
+
+  it("an exited status with a large pending page still says more is pending", async () => {
+    const { fb, svc } = setup(mk(["--max-output", "10"]));
+    fb.jobStatuses.set("job1", { state: "exited", exitCode: 0 });
+    fb.readQueue.push({ text: "a".repeat(15), cursor: "c1" }, { text: "b".repeat(5), cursor: "c2" });
+    const r1 = await svc.output({ job_id: "job1" });
+    expect(r1.text).toContain("more output pending");
+    const r2 = await svc.output({ job_id: "job1" });
+    // The pending remainder fits in this page, so the log is read again and nothing is dropped.
+    expect(r2.text.split("\n---\n")[1]).toBe("aaaaabbbbb");
   });
 
   it("maps statuses", async () => {
