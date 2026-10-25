@@ -9,41 +9,7 @@ commands with a timeout), `shell_output`, `shell_kill` and `shell_list`. Paths
 are translated between the host project folder and the sandbox mount, and the
 working directory is tracked across calls.
 
-Status: v1, not published to npm. Windows hosts only; Linux and macOS hosts are
-deferred. See [ROADMAP.md](ROADMAP.md).
-
-## Status
-
-The microsandbox SDK spike (`spike/`) and the integration suite
-(`test/integration.test.ts`) have **not yet been run on a real host**. The unit
-tests pass against a mocked backend only. Behaviors that depend on the real
-SDK are listed under [Limitations](#limitations).
-
-To run them, in PowerShell, with a running sandbox:
-
-```powershell
-# Integration suite (repo root)
-$env:SHELL_MCP_IT_SANDBOX="myproj"; $env:SHELL_MCP_IT_HOST_ROOT="C:\Users\eugen\dev\myproj"; $env:SHELL_MCP_IT_GUEST_ROOT="/workspace"; npx vitest run test/integration.test.ts
-```
-
-Expected: 12 pass, or 11 pass and 1 skipped.
-
-```powershell
-# SDK spike (see spike\README.md)
-mkdir C:\temp\spike-ws -Force
-msb create <image> --name spike --mount-dir C:\temp\spike-ws:/workspace
-msb start spike          # skip if create already starts it
-msb --version
-cd spike
-npm install
-node sdk-check.mjs spike *>&1 | Tee-Object -FilePath spike-output.txt
-
-# Optional: probe a stopped sandbox too
-msb create <image> --name spike-stopped
-msb stop spike-stopped
-$env:SPIKE_STOPPED = "spike-stopped"
-node sdk-check.mjs spike *>&1 | Tee-Object -FilePath spike-output.txt
-```
+v1, Windows hosts only, not published to npm; see [Status](#status).
 
 ## Requirements
 
@@ -59,10 +25,10 @@ node sdk-check.mjs spike *>&1 | Tee-Object -FilePath spike-output.txt
 
 ## Install
 
-shell-mcp is not published. Clone and build it:
+shell-mcp is not published. Clone this repository and build it:
 
 ```powershell
-git clone <repo-url> C:\Users\eugen\dev\shell-mcp
+# clone this repository to C:\Users\eugen\dev\shell-mcp, then:
 cd C:\Users\eugen\dev\shell-mcp
 npm ci
 npm run build
@@ -100,11 +66,17 @@ Flags win over environment variables.
 | `--default-timeout` | `SHELL_MCP_DEFAULT_TIMEOUT` | `120s` |
 | `--max-timeout` | `SHELL_MCP_MAX_TIMEOUT` | `600s` |
 | `--max-output` | `SHELL_MCP_MAX_OUTPUT` | `30000` |
-| `--no-rewrite-output-paths` | `SHELL_MCP_REWRITE_OUTPUT_PATHS=0` | rewriting on |
+| `--no-rewrite-output-paths` | `SHELL_MCP_REWRITE_OUTPUT_PATHS=0` (or `false`, `no`) | rewriting on |
 | `--shell` | `SHELL_MCP_SHELL` | `bash` |
 
-`--host-root` is normalized with `path.resolve` and must exist on disk. The
-guest root must be an absolute POSIX path; a trailing `/` is stripped.
+`--host-root` must be an absolute path. It is normalized (`path.win32.normalize`:
+`/` becomes `\`, `.` and `..` segments are collapsed), a trailing separator is
+stripped, and it must exist on disk. The guest root must be an absolute POSIX
+path; a trailing `/` is stripped.
+
+Path rewriting is turned off only by `--no-rewrite-output-paths` or by
+`SHELL_MCP_REWRITE_OUTPUT_PATHS` set to `0`, `false` or `no` (any case). Any
+other value leaves it on; the flag wins over the variable.
 
 ## Claude Code
 
@@ -133,10 +105,6 @@ shell-mcp, in `.claude/settings.json` (example:
 ```json
 { "permissions": { "deny": ["Bash"] } }
 ```
-
-`node` needs no wrapper. If the server were ever launched via `npx` on native
-Windows, Claude Code would need `"command": "cmd", "args": ["/c", "npx", ...]`;
-that does not apply to the `node <clone>\dist\index.js` setup above.
 
 ## GitHub Copilot (VS Code)
 
@@ -197,9 +165,49 @@ the sandbox is running and reachable.
 - The `microsandbox` SDK and the `msb` runtime must be the same version; the
   SDK is pinned to 0.7.11 for that reason.
 - Parallel calls run concurrently; the last to finish sets the working directory.
+- A command killed by a signal other than the timeout (for example `kill -9 $$`,
+  or the out-of-memory killer) reports exit code -1, not 128+N: the sandbox
+  does not pass the signal number through.
+- If the sandbox never confirms the exit after a timeout kill, the result still
+  says `timed out` and adds a note that the exit was not confirmed.
 - Maintainer note (not a user-facing promise): timeout detection relies on the
-  sandbox reporting exit code -1 when the SDK's deadline kills the shell. This
+  sandbox reporting exit code -1 when the SDK's deadline kills the shell, with
+  shell-mcp's own kill half a second past the deadline as a fallback. The -1
   comes from reading the SDK source and is to be confirmed by the spike.
 - Maintainer note: the other SDK behaviors the backend assumes (error codes,
   cursor semantics, process-group kill, behavior on Windows) are likewise
   unconfirmed until the spike runs.
+
+## Status
+
+The microsandbox SDK spike (`spike/`) and the integration suite
+(`test/integration.test.ts`) have **not yet been run on a real host**. The unit
+tests pass against a mocked backend only. Behaviors that depend on the real
+SDK are listed under [Limitations](#limitations). Linux and macOS hosts are
+deferred; see [ROADMAP.md](ROADMAP.md).
+
+To run them, in PowerShell, with a running sandbox:
+
+```powershell
+# Integration suite (repo root)
+$env:SHELL_MCP_IT_SANDBOX="myproj"; $env:SHELL_MCP_IT_HOST_ROOT="C:\Users\eugen\dev\myproj"; $env:SHELL_MCP_IT_GUEST_ROOT="/workspace"; npx vitest run test/integration.test.ts
+```
+
+Expected: 12 pass, or 11 pass and 1 skipped.
+
+```powershell
+# SDK spike (see spike\README.md)
+mkdir C:\temp\spike-ws -Force
+msb create <image> --name spike --mount-dir C:\temp\spike-ws:/workspace
+msb start spike          # skip if create already starts it
+msb --version
+cd spike
+npm install
+node sdk-check.mjs spike *>&1 | Tee-Object -FilePath spike-output.txt
+
+# Optional: probe a stopped sandbox too
+msb create <image> --name spike-stopped
+msb stop spike-stopped
+$env:SPIKE_STOPPED = "spike-stopped"
+node sdk-check.mjs spike *>&1 | Tee-Object -FilePath spike-output.txt
+```
