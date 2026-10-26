@@ -6,7 +6,7 @@ Guidance for coding agents working on this repository. Humans: see
 ## What this is
 
 `@edorosh/shell-mcp`: an MCP server (stdio, TypeScript, Node 22+) that runs on a
-Windows host and executes shell commands inside an existing microsandbox
+Windows or macOS (Apple Silicon) host and executes shell commands inside an existing microsandbox
 sandbox. The requirements are in [docs/product-spec.md](docs/product-spec.md);
 requirement IDs (C4, S5, P4, ...) are cited in code and tests.
 
@@ -20,9 +20,9 @@ npm run build
 npm run check:pack  # what the published tarball contains and that the bin starts
 ```
 
-CI runs typecheck, build and tests on Ubuntu and Windows, plus the pack check on
-Windows. `test/integration.test.ts` needs a real sandbox on a Windows host
-(`SHELL_MCP_IT_*` variables) and is skipped otherwise; you cannot run it from a
+CI runs typecheck, build and tests on Ubuntu, Windows and macOS, plus the pack
+check on Windows and macOS. `test/integration.test.ts` needs a real sandbox on a
+Windows host or an Apple Silicon Mac (`SHELL_MCP_IT_*` variables) and is skipped otherwise; you cannot run it from a
 Linux container.
 
 ## Layout

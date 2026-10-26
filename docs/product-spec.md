@@ -37,7 +37,7 @@ Motivations:
 
 | Term | Meaning |
 |------|---------|
-| Host | The machine running the agent and the shell-mcp server. v1: Windows. |
+| Host | The machine running the agent and the shell-mcp server. Windows, or macOS on Apple Silicon (v2.1). |
 | Sandbox | An isolated Linux environment in which commands run. |
 | Backend | The sandboxing technology providing the sandbox (v1: microsandbox). |
 | Client | The MCP host application (Claude Code, GitHub Copilot in VS Code). |
@@ -71,9 +71,10 @@ Motivations:
 - N3. Interactive programs requiring a terminal (editors, password prompts,
   REPLs driven by keystrokes).
 - N4. File read/write tools. Those stay with the client's built-in tools.
-- N6. Linux and macOS hosts. Deferred to a later version. Nothing in v1
+- N6. Linux hosts. Deferred to a later version. Nothing in v1
   may assume a Windows host beyond the host-path rules of §8, so that
-  adding them later is a matter of path handling and testing.
+  adding them later is a matter of path handling and testing. (Amended v2.1:
+  macOS supported.)
 - N5. Backends other than microsandbox (e.g. Docker sbx). The design MUST
   NOT preclude adding them later (see §6).
 

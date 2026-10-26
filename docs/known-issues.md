@@ -37,8 +37,11 @@
 
 ## Status
 
-- Windows hosts only. Linux and macOS hosts are planned; see
-  [ROADMAP.md](../ROADMAP.md).
+- Windows and macOS (Apple Silicon) hosts are supported. Linux hosts are
+  planned; see [ROADMAP.md](../ROADMAP.md).
+- On macOS the guest sees the Mac's case-insensitive file system, and `msb`
+  needs a mount path without symlinks (see
+  [Sandbox and runtime](sandbox.md#macos)).
 - The microsandbox SDK spike (`spike/`) has been run on Windows (results in
   [spike-results.md](superpowers/specs/spike-results.md) and
   [v2-spike-results.md](superpowers/specs/v2-spike-results.md)).
@@ -50,7 +53,9 @@
 | Client | Host | Status |
 |--------|------|--------|
 | Claude Code | Windows | Verified |
+| Claude Code | macOS (Apple Silicon) | Verified in the v2.1 spike with 1.0.2 |
 | GitHub Copilot in VS Code | Windows | Verified, including the hook that turns off the built-in shell |
-| GitHub Copilot hook (`deny-shell.sh`) | Linux, macOS | Untested |
+| GitHub Copilot in VS Code | macOS (Apple Silicon) | Verified in the v2.1 spike with 1.0.2, including `deny-shell.sh` |
+| GitHub Copilot hook (`deny-shell.sh`) | Linux | Untested |
 | Local-harness agent file | Windows | Untested |
 | Copilot CLI with `--deny-tool` | Windows | Untested |

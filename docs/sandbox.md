@@ -46,6 +46,38 @@ The values to give shell-mcp are the sandbox name (`myproj`), the host folder
 (`C:\Users\<you>\dev\myproj`, where `<you>` is your Windows user name) and the
 guest path (`/workspace`).
 
+## macOS
+
+The host must be an Apple Silicon Mac running an arm64 Node (`node -p
+process.arch` prints `arm64`). The sandbox is a Linux guest on the same
+microsandbox runtime as on Windows.
+
+- **The bundled `msb` is not on `PATH`.** The runtime packaged with the SDK
+  lives inside the npm package, so run it through npx, as in the Windows
+  commands above:
+
+  ```zsh
+  npx -y -p microsandbox@0.7.11 msb create ubuntu:24.04 --name myproj --mount-dir "$(cd ~/dev/myproj && pwd -P):/workspace"
+  ```
+
+  The same form works for `msb start myproj`, `msb stop myproj` and
+  `msb --version`.
+- **Mount the resolved path.** `msb create` refuses a host path that goes
+  through a symlink, for example when `~/dev` is a link to another volume:
+
+  ```text
+  error: invalid config: bind mount host path /Users/<you>/dev/myproj goes through symlink /Users/<you>/dev; use the resolved path /Volumes/<disk>/dev/myproj or add follow-root-symlinks
+  ```
+
+  `pwd -P` prints the resolved path, which is why the commands above use
+  `"$(cd ~/dev/myproj && pwd -P)"`. Give shell-mcp the same resolved path as
+  `--host-root` if it differs from the one you type.
+- **Images need an arm64 variant.** The guest is aarch64, so an image such as
+  `ubuntu:24.04` works only if it is published for arm64 (the common ones are).
+- **The guest sees the Mac's file system.** The default macOS volume is
+  case-insensitive, so `Foo.txt` and `foo.txt` are the same file in the
+  sandbox too, unlike on a normal Linux file system.
+
 ## Upgrading
 
 Change the version in the client config (for example `@edorosh/shell-mcp@1.0.2`)
