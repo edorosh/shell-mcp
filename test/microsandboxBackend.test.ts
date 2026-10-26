@@ -759,7 +759,8 @@ describe("MicrosandboxBackend in create mode", () => {
     await be.run("true", { timeoutMs: 400 });
     const t = sb.execs[0]!.timeout!;
     expect(t).toBeGreaterThan(0);
-    expect(t).toBeLessThanOrEqual(80);
+    // About 400 - 320 = 80; the slack covers early timers and Windows' coarse clock (CI saw 81).
+    expect(t).toBeLessThanOrEqual(110);
   });
 
   it("a cancelled call stops waiting for provisioning", async () => {
