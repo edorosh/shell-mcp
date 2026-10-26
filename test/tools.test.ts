@@ -17,7 +17,7 @@ const cfg = parseConfig(
 async function connect() {
   const fb = new FakeBackend();
   const svc = new ShellService(cfg, fb, { nonce: "n" });
-  const server = createServer(cfg, svc);
+  const server = createServer(cfg, svc, "9.9.9");
   const client = new Client({ name: "t", version: "0" });
   const [a, b] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(a), client.connect(b)]);
@@ -26,6 +26,11 @@ async function connect() {
 const textOf = (r: any) => (r.content as Array<{ type: string; text: string }>)[0]!.text;
 
 describe("MCP registration", () => {
+  it("reports the given version in serverInfo", async () => {
+    const { client } = await connect();
+    expect(client.getServerVersion()).toEqual({ name: "shell-mcp", version: "9.9.9" });
+  });
+
   it("lists the four tools with descriptions", async () => {
     const { client } = await connect();
     const { tools } = await client.listTools();

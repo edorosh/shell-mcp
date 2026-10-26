@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-10-26
+
+### Fixed
+
+- The MCP `initialize` response reports the package version instead of a
+  hardcoded `0.1.0`.
+
 ## [1.0.1] - 2026-10-25
 
 First release published from GitHub Actions with npm trusted publishing and

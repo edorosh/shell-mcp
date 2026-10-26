@@ -4,12 +4,10 @@ import type { Config } from "./config.js";
 import { describeTools } from "./descriptions.js";
 import type { CallContext, ShellService, ToolResult } from "./service.js";
 
-const VERSION = "0.1.0";
-
 const out = (r: ToolResult) => ({ content: [{ type: "text" as const, text: r.text }], isError: r.isError });
 
-export function createServer(cfg: Config, service: ShellService): McpServer {
-  const server = new McpServer({ name: "shell-mcp", version: VERSION });
+export function createServer(cfg: Config, service: ShellService, version: string): McpServer {
+  const server = new McpServer({ name: "shell-mcp", version });
   const d = describeTools(cfg);
 
   server.registerTool(
