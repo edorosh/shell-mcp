@@ -28,6 +28,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   background; an early tool call reports that it is still being prepared.
   `--prepare` does the first image pull in a terminal. `--check` stays
   read-only.
+- [Typical setups](docs/setups.md): ready-to-copy configurations for people
+  new to microsandbox (no internet, package registries only, full internet,
+  extra mounts, more CPU and memory).
 - On macOS, host symlinks in `--mount` paths are resolved automatically.
 
 microsandbox SDK 0.7.11, expects msb 0.7.11.

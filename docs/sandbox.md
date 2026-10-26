@@ -26,7 +26,8 @@ bind-mounts a host folder; the first mount is the project mount that file
 paths are translated against. Use an image that contains `bash`, for example
 `ubuntu:24.04`; the configured shell (default `bash`) is the only shell used,
 with no `sh` fallback. The full flag list is in
-[Configuration](configuration.md).
+[Configuration](configuration.md); ready-to-copy examples are in
+[Typical setups](setups.md).
 
 Claude Code, `.mcp.json` on Windows:
 
@@ -70,7 +71,9 @@ a sandbox that does not exist, and never creates, starts or recreates one.
 
 **Network.** The sandbox has no network access by default, and private
 addresses are never opened: no rule allows private, LAN, loopback or host
-ranges. Whether an allowed domain that resolves to a private address is
+ranges. A denied plain-HTTP request gets `403 Forbidden` with a JSON body from
+the sandbox's own network stack (checked on Windows against a LAN router), and
+a denied connection on another port is refused. Whether an allowed domain that resolves to a private address is
 reachable depends on the runtime and is still being checked. `--allow-domain
 HOST` (repeatable, a host or a suffix such as `*.example.com`) opens single
 hosts; `--allow-network` opens all public hosts. Add mounts, `--cpus` and

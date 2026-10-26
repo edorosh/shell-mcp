@@ -25,6 +25,10 @@ Published on npm as [`@edorosh/shell-mcp`](https://www.npmjs.com/package/@edoros
 
 ## Quick start
 
+New to microsandbox? [Typical setups](docs/setups.md) has ready-to-copy
+configurations: no internet, package registries only, full internet, extra
+folders, a bigger machine.
+
 **1. Check the setup, and do the first image pull in a terminal** (the sandbox
 is created on first use and keeps running after the client exits):
 
@@ -75,6 +79,7 @@ Ready-made files are in [examples/](examples/).
 
 ## Documentation
 
+- [Typical setups](docs/setups.md): ready-to-copy configurations for people new to microsandbox.
 - [Sandbox and runtime](docs/sandbox.md): creating a sandbox, `msb` versions, upgrading.
 - [Client setup](docs/clients.md): Claude Code, GitHub Copilot, Copilot CLI, client timeouts.
 - [Configuration](docs/configuration.md): all flags and environment variables, `--check`, global install.
