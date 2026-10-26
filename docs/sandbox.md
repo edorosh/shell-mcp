@@ -173,6 +173,6 @@ under [macOS](#macos) apply here too.
 
 Change the version in the client config (for example `@edorosh/shell-mcp@1.2.0`)
 and run `--check` with the new version. If the expected `msb` version changed
-(see [CHANGELOG.md](../CHANGELOG.md)), update `msb` to match (in create mode, `--recreate` if the settings changed). Close
-running clients first (see
+(see [CHANGELOG.md](../CHANGELOG.md)), update `msb` to match (in create mode,
+use `--recreate` if the settings changed). Close running clients first (see
 [Troubleshooting](troubleshooting.md#access-denied-when-clearing-the-npx-cache-or-upgrading)).

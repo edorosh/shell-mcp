@@ -1,6 +1,6 @@
 # shell-mcp — Product Specification
 
-Status: current through release 1.2.0 (v1, v2, v2.1 and v3) · Date: 2026-10-25 ·
+Status: current through release 1.2.0 (v1, v2, v2.1 and v3) · Date: 2026-10-26 ·
 v2 amendments 2026-10-25 · v2.1 (macOS) 2026-10-26 · updated 2026-10-26
 
 ## 1. Conventions
@@ -168,10 +168,12 @@ These outcomes make the product a failure even if it otherwise works:
   background command, read its output incrementally, query its status,
   terminate it, and list the background commands it started.
 - B3. The implementation MUST connect to an already-existing sandbox. It MUST
-  NOT create, start, stop, restart, or delete sandboxes.
+  NOT create, start, stop, restart, or delete sandboxes. (Amended v3: attach
+  mode only; in create mode see C13.)
 - B4. When the sandbox is stopped or missing, the implementation MUST fail
   the tool call (§10) rather than start or create it. The error message
-  SHOULD tell the user how to start the sandbox.
+  SHOULD tell the user how to start the sandbox. (Amended v3: attach mode
+  only; in create mode the instance creates or starts the sandbox, C13.)
 - B5. Where the backend has a separately installed runtime whose version
   must match its SDK (microsandbox: `msb`), the implementation MUST pin the
   SDK to an exact version, and after connecting to the client SHOULD log to
@@ -386,7 +388,9 @@ server bridges the two deterministically.
 The project MUST ship user documentation covering:
 
 - I1. Creating a suitable sandbox with the project folder mounted, with a
-  concrete microsandbox example.
+  concrete microsandbox example, for both modes: create mode (`--image` and
+  `--mount`, `--prepare`, stopping and removing the persistent sandbox) and
+  attach mode (a sandbox the user created). (Amended v3.)
 - I2. Registering the server in Claude Code (`.mcp.json`) and GitHub Copilot
   (`.vscode/mcp.json`) on Windows, running the published package at an exact
   version (`npx -y @edorosh/shell-mcp@<version>`). (Amended 2026-10-25, v2.)

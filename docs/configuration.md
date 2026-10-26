@@ -66,7 +66,15 @@ exits 1 if any step failed:
 5. the shell runs (`uname -s` returns `Linux`);
 6. each host folder is mounted at its guest path (both list the same names); one line per mount.
 
-It is read-only and writes nothing on either side.
+In create mode there is an extra `definition` step between the runtime and the
+sandbox: it compares the existing sandbox with the flags, and prints
+`ok definition: matches the flags` or `FAIL definition: <differences>` (the
+steps after it are `skipped`). A sandbox that does not exist yet fails as
+`FAIL sandbox: "myproj" is not created yet; run with --prepare`. Every
+`--mount` is checked, not only the project mount.
+
+It is read-only and writes nothing on either side; in create mode it never
+creates, starts or recreates the sandbox.
 
 ## npx or global install
 
