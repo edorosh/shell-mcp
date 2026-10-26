@@ -211,7 +211,7 @@ Claude Code, `.mcp.json`:
       "args": [
         "/c", "npx", "-y", "@edorosh/shell-mcp@1.0.0",
         "--sandbox", "myproj",
-        "--host-root", "C:\\Users\\eugen\\dev\\myproj",
+        "--host-root", "C:\\Users\\<you>\\dev\\myproj",
         "--guest-root", "/workspace"
       ]
     }
@@ -219,7 +219,7 @@ Claude Code, `.mcp.json`:
 }
 ```
 
-or `claude mcp add sandbox --scope project -- cmd /c npx -y @edorosh/shell-mcp@1.0.0 --sandbox myproj --host-root C:\Users\eugen\dev\myproj --guest-root /workspace`.
+or `claude mcp add sandbox --scope project -- cmd /c npx -y @edorosh/shell-mcp@1.0.0 --sandbox myproj --host-root C:\Users\<you>\dev\myproj --guest-root /workspace`.
 
 GitHub Copilot, `.vscode/mcp.json` (the `${workspaceFolder}` form only if
 risk 4 confirms it):

@@ -17,7 +17,7 @@ the case as a native-module failure.
 
 | Case | `origin` | `msbPath` | version |
 |---|---|---|---|
-| Home install present | `home` | `C:\Users\eugen\.microsandbox\bin\msb.exe` | 0.7.11 |
+| Home install present | `home` | `%USERPROFILE%\.microsandbox\bin\msb.exe` | 0.7.11 |
 | `MSB_HOME` pointed at an empty folder | `sdk_package` | `…\node_modules\@superradcompany\microsandbox-win32-x64-msvc\bin\msb.exe` | 0.7.11 |
 
 - With `MSB_HOME` set to the empty folder, `npx -p microsandbox@0.7.11 msb create ubuntu:24.04 --name spike-pkg --mount-dir C:\temp\spike-ws:/workspace` created and started the sandbox (`create` starts it; a following `msb start` reports "already running").
