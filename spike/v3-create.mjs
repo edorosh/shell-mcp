@@ -1,5 +1,5 @@
 // v3 spike: the microsandbox SDK create API. Usage:
-//   node spike/v3-create.mjs create <name> <hostDir>
+//   node spike/v3-create.mjs create <name> <hostDir> [--default-net]   (--default-net: no .network() call)
 //   node spike/v3-create.mjs config <name>
 //   node spike/v3-create.mjs build <name> <hostDir>
 //   node spike/v3-create.mjs net <name>
@@ -8,11 +8,15 @@
 // `create` exits WITHOUT stopping or disposing the sandbox on purpose: that is what it tests.
 import { readFileSync } from "node:fs";
 
-const [cmd, name, hostDir] = process.argv.slice(2);
+const args = process.argv.slice(2);
+const defaultNet = args.includes("--default-net");
+const [cmd, name, hostDir] = args.filter((a) => a !== "--default-net");
+// Flush stdout before exiting. process.exit is kept on purpose: create must not dispose the sandbox.
+const exit = (code) => process.stdout.write("", () => process.exit(code));
 const usage = "usage: node spike/v3-create.mjs <create|config|build|net|stop|start|remove> <name> [hostDir]";
 if (!cmd || !name || ((cmd === "create" || cmd === "build") && !hostDir)) {
   console.error(usage);
-  process.exit(2);
+  exit(2);
 }
 
 const show = (label, value) =>
@@ -46,7 +50,7 @@ await check("0 load", async () => {
   }
   show("0 load", { ok: true, platform: process.platform, arch: process.arch, node: process.version, sdkVersion });
 });
-if (!sdk) process.exit(1);
+if (!sdk) exit(1);
 const { Sandbox, Rule, Destination } = sdk;
 
 const policy = {
@@ -57,19 +61,20 @@ const policy = {
 // The brief said policyJson(JSON.stringify(policy)), but the typed Rule/Destination values use
 // {kind:"domain"} and the native policyJson parser rejects that (it wants {domain:"..."}).
 // So create uses .policy(policy) (typed objects). `build` also tries policyJson to record the result.
-const makeBuilder = (viaJson = false) =>
-  Sandbox.builder(name)
+const makeBuilder = (viaJson = false) => {
+  const b = Sandbox.builder(name)
     .image("ubuntu:24.04")
     .pullPolicy("if-missing")
     .volume("/workspace", (m) => m.bind(hostDir))
-    .network((n) => (viaJson ? n.policyJson(JSON.stringify(policy)) : n.policy(policy)))
     .cpus(1)
     .memory(1024)
     .detached(true);
+  return defaultNet ? b : b.network((n) => (viaJson ? n.policyJson(JSON.stringify(policy)) : n.policy(policy)));
+};
 
 const commands = {
   async create() {
-    show("create policy", policy);
+    show("create policy", defaultNet ? "none: --default-net, no .network() call" : policy);
     const t0 = Date.now();
     const pc = await makeBuilder().createWithPullProgress();
     show("create started", { ms: Date.now() - t0 });
@@ -78,10 +83,16 @@ const commands = {
     } catch (e) {
       show("create progress loop threw", errInfo(e));
     }
-    const sb = await pc.awaitSandbox();
+    let sb;
+    try {
+      sb = await pc.awaitSandbox();
+    } catch (e) {
+      show("create awaitSandbox threw", { ...errInfo(e), ms: Date.now() - t0 });
+      return;
+    }
     show("create done", { ms: Date.now() - t0, name: sb.name, ownsLifecycle: sb.ownsLifecycle, className: sb.constructor?.name });
-    show("create exiting", "process.exit(0) now, without stop/dispose/detach; run `msb ls` next");
-    process.exit(0);
+    show("create exiting", "process.exit(0) now (stdout flushed first), without stop/dispose/detach; run `msb ls` next");
+    exit(0);
   },
   async config() {
     const h = await Sandbox.get(name);
@@ -94,16 +105,19 @@ const commands = {
     show("config config()", h.config());
   },
   async build() {
-    show("build policy", policy);
+    show("build policy", defaultNet ? "none: --default-net, no .network() call" : policy);
     show("build .build() with .policy(policy)", await makeBuilder().build());
     await check("build policyJson", async () => {
       show("build .build() with .policyJson(JSON.stringify(policy))", await makeBuilder(true).build());
     });
   },
   async net() {
+    const t0 = Date.now();
     const h = await Sandbox.get(name);
+    const tGet = Date.now() - t0;
     show("net status", h.status);
     const sb = await h.connectWithTimeout(10_000);
+    show("net reuse timing", { getMs: tGet, connectMs: Date.now() - t0 - tGet, getPlusConnectMs: Date.now() - t0 });
     const probes = [["example.com", 443], ["www.iana.org", 443], ["192.168.1.1", 80]];
     for (const [host, port] of probes) {
       await check(`net ${host}:${port}`, async () => {
@@ -127,7 +141,7 @@ const commands = {
       return { name: sb.name, ownsLifecycle: sb.ownsLifecycle };
     });
     show("start status after", (await Sandbox.get(name)).status);
-    process.exit(0);
+    exit(0);
   },
   async remove() {
     await timed("remove (Sandbox.remove)", () => Sandbox.remove(name));
@@ -142,7 +156,7 @@ const commands = {
 
 if (!commands[cmd]) {
   console.error(usage);
-  process.exit(2);
+  exit(2);
 }
 await check(cmd, commands[cmd]);
-process.exit(0);
+exit(0);
