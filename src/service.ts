@@ -13,7 +13,12 @@ const isSandboxState = (k: BackendError["kind"]) =>
   k === "not_found" || k === "not_running" || k === "unreachable" || k === "preparing" || k === "config_mismatch";
 
 /** Wording for a backend failure, shared by the tools and `--check`. Other kinds keep their own message. */
-export function backendErrorText(err: BackendError, sandbox: string): string {
+export function backendErrorText(err: BackendError, sandbox: string, create = false): string {
+  if (create) {
+    // Create mode starts the sandbox itself on the next call: never point at msb.
+    if (err.kind === "not_running") return `sandbox "${sandbox}" is not running; the next call starts it again.`;
+    if (err.kind === "unreachable") return `sandbox "${sandbox}" is unreachable: ${err.message}. The next call retries.`;
+  }
   switch (err.kind) {
     case "not_found":
       return `sandbox "${sandbox}" not found. Create it with msb create … --name ${sandbox}.`;
@@ -218,7 +223,7 @@ export class ShellService {
   protected errorResult(e: unknown, tool: "shell" | "shell_output" | "shell_kill" | "shell_list" = "shell"): ToolResult {
     const name = this.cfg.sandbox;
     const err = e instanceof BackendError ? e : new BackendError("outcome_unknown", e instanceof Error ? e.message : String(e));
-    const sandboxState = isSandboxState(err.kind) ? backendErrorText(err, name) : undefined;
+    const sandboxState = isSandboxState(err.kind) ? backendErrorText(err, name, this.cfg.machine !== undefined) : undefined;
     let text: string;
     if (tool === "shell") {
       if (sandboxState) text = `Command was not started: ${sandboxState}`;

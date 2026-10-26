@@ -743,11 +743,32 @@ describe("MicrosandboxBackend in create mode", () => {
   });
 
   it("warm() starts ensure() and swallows its rejection", async () => {
-    const { be, prov, ensures } = createSetup();
+    const { be, prov, sb, ensures } = createSetup();
     prov.impl = async () => { throw new Error("boom"); };
     be.warm();
     await new Promise((r) => setTimeout(r, 10));
     expect(ensures()).toBe(1);
+    prov.impl = async () => sb;
+    await expect(be.run("true", { timeoutMs: 1000 })).resolves.toMatchObject({ exitCode: 0 });
+    expect(ensures()).toBe(2);
+  });
+
+  it("the provisioning wait counts against the call's timeout: the exec gets the remainder", async () => {
+    const { be, sb, prov } = createSetup();
+    prov.impl = () => new Promise<SdkSandbox>((r) => setTimeout(() => r(sb), 320));
+    await be.run("true", { timeoutMs: 400 });
+    const t = sb.execs[0]!.timeout!;
+    expect(t).toBeGreaterThan(0);
+    expect(t).toBeLessThanOrEqual(80);
+  });
+
+  it("a cancelled call stops waiting for provisioning", async () => {
+    const { be, prov } = createSetup();
+    prov.impl = () => new Promise<SdkSandbox>(() => {});
+    const ac = new AbortController();
+    const p = be.run("x", { timeoutMs: 5000, signal: ac.signal });
+    setTimeout(() => ac.abort(), 10);
+    await expect(p).rejects.toMatchObject({ kind: "not_started" });
   });
 
   it("backendErrorText leaves preparing and config_mismatch unchanged", () => {

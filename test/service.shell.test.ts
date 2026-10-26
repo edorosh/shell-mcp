@@ -115,6 +115,21 @@ describe("ShellService.shell foreground", () => {
     }
   });
 
+  it("create mode never mentions msb for not_running and unreachable; attach texts are unchanged", async () => {
+    const create = parseConfig(["--sandbox", "sb", "--image", "i", "--mount", "/h/p:/workspace"], {},
+      { platform: "darwin", exists: () => true, realpath: (p: string) => p });
+    const c = setup(create);
+    c.fb.queueRun(new BackendError("not_running", "stopped"));
+    expect((await c.svc.shell({ command: "x" })).text).toBe('Command was not started: sandbox "sb" is not running; the next call starts it again.');
+    c.fb.queueRun(new BackendError("unreachable", "pull failed: unknown image"));
+    expect((await c.svc.shell({ command: "x" })).text).toBe('Command was not started: sandbox "sb" is unreachable: pull failed: unknown image. The next call retries.');
+    const a = setup();
+    a.fb.queueRun(new BackendError("not_running", "stopped"));
+    expect((await a.svc.shell({ command: "x" })).text).toBe('Command was not started: sandbox "sb" is not running. Start it with: msb start sb');
+    a.fb.queueRun(new BackendError("unreachable", "boom"));
+    expect((await a.svc.shell({ command: "x" })).text).toBe('Command was not started: sandbox "sb" is unreachable: boom. If it is stopped, start it with: msb start sb');
+  });
+
   it("maps backend errors", async () => {
     const { fb, svc } = setup();
     fb.queueRun(new BackendError("not_running", "stopped"));

@@ -185,12 +185,16 @@ export class MicrosandboxBackend implements Backend {
     const { timeoutMs, signal } = opts;
     const cancelled = () => new BackendError("not_started", "cancelled before start");
     if (signal?.aborted) throw cancelled();
-    const { sb, cached } = await this.connectTracked(timeoutMs);
+    // Create mode: preparing the sandbox counts against this call's timeout.
+    const begun = this.provisioner ? this.now() : undefined;
+    const { sb, cached } = await this.connectTracked(timeoutMs, signal);
     if (signal?.aborted) throw cancelled();
     const start = this.now();
+    const budget = begun === undefined ? timeoutMs : timeoutMs - (start - begun);
+    if (budget <= 0) throw this.preparingError();
     let handle: SdkExecHandle;
     try {
-      handle = await sb.execStreamWith(this.shell, (b) => b.args(["-c", script]).timeout(timeoutMs).stdinNull());
+      handle = await sb.execStreamWith(this.shell, (b) => b.args(["-c", script]).timeout(budget).stdinNull());
     } catch (e) {
       throw await this.failChecked(e, "before", cached);
     }
@@ -218,7 +222,7 @@ export class MicrosandboxBackend implements Backend {
         weKilled = true;
         kill();
         timers.push(setTimeout(() => requestStop("deadline"), this.graceMs));
-      }, timeoutMs + this.killDelayMs),
+      }, budget + this.killDelayMs),
     ];
     const onAbort = () => {
       kill();
@@ -263,7 +267,7 @@ export class MicrosandboxBackend implements Backend {
 
     out.append(acc.stdout.finish());
     out.append(acc.stderr.finish());
-    const deadlinePassed = weKilled || this.now() - start >= timeoutMs;
+    const deadlinePassed = weKilled || this.now() - start >= budget;
     const result = (exit: number | null, timedOut: boolean): RunResult => ({
       output: out.text(), exitCode: exit, timedOut, droppedChars: out.dropped,
     });
@@ -387,24 +391,32 @@ export class MicrosandboxBackend implements Backend {
   }
 
   /** cached: the connection existed before this call, so it may be stale. */
-  private async connectTracked(raceMs: number = this.prepareWaitMs): Promise<{ sb: SdkSandbox; cached: boolean }> {
+  private async connectTracked(raceMs: number = this.prepareWaitMs, signal?: AbortSignal): Promise<{ sb: SdkSandbox; cached: boolean }> {
     const cached = this.conn !== undefined;
     const conn = this.connect();
     // Create mode, nothing connected yet: do not hold the call past raceMs while the sandbox is prepared.
     // The pending ensure() keeps running and the next call joins it.
-    const provisioner = this.provisioner;
-    if (!provisioner || this.connReady) return { sb: await conn, cached };
+    if (!this.provisioner || this.connReady) return { sb: await conn, cached };
     let timer: NodeJS.Timeout | undefined;
+    let onAbort: (() => void) | undefined;
     const late = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => {
-        reject(new BackendError("preparing", `sandbox "${this.sandboxName}" is still being prepared (${provisioner.progress()}); retry shortly`));
-      }, raceMs);
+      timer = setTimeout(() => reject(this.preparingError()), raceMs);
+      if (signal) {
+        onAbort = () => reject(new BackendError("not_started", "cancelled before start"));
+        if (signal.aborted) onAbort();
+        else signal.addEventListener("abort", onAbort, { once: true });
+      }
     });
     try {
       return { sb: await Promise.race([conn, late]), cached };
     } finally {
       clearTimeout(timer);
+      if (onAbort) signal?.removeEventListener("abort", onAbort);
     }
+  }
+
+  private preparingError(): BackendError {
+    return new BackendError("preparing", `sandbox "${this.sandboxName}" is still being prepared (${this.provisioner?.progress() ?? ""}); retry shortly`);
   }
 
   private connect(): Promise<SdkSandbox> {
