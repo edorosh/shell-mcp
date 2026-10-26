@@ -42,7 +42,7 @@
 - On macOS the guest sees the Mac's case-insensitive file system, and `msb`
   needs a mount path without symlinks (see
   [Sandbox and runtime](sandbox.md#macos)).
-- The microsandbox SDK spike (`spike/`) has been run on Windows (results in
+- The microsandbox SDK spikes have been run on Windows (results in
   [spike-results.md](superpowers/specs/spike-results.md) and
   [v2-spike-results.md](superpowers/specs/v2-spike-results.md)) and on macOS
   (2026-10-26: [v2.1-macos-spike-results.md](superpowers/specs/v2.1-macos-spike-results.md)).

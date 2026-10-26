@@ -64,26 +64,6 @@ SHELL_MCP_IT_IMAGE=ubuntu:24.04 SHELL_MCP_IT_HOST_ROOT=/Users/<you>/dev npx vite
 CI runs typecheck, build and tests on Ubuntu, Windows and macOS, and the pack
 check on Windows and macOS.
 
-## SDK spike
-
-See [spike/README.md](../spike/README.md):
-
-```powershell
-mkdir C:\temp\spike-ws -Force
-msb create <image> --name spike --mount-dir C:\temp\spike-ws:/workspace
-msb start spike          # skip if create already starts it
-msb --version
-cd spike
-npm install
-node sdk-check.mjs spike *>&1 | Tee-Object -FilePath spike-output.txt
-
-# Optional: probe a stopped sandbox too
-msb create <image> --name spike-stopped
-msb stop spike-stopped
-$env:SPIKE_STOPPED = "spike-stopped"
-node sdk-check.mjs spike *>&1 | Tee-Object -FilePath spike-output.txt
-```
-
 ## Releasing
 
 See [releasing.md](releasing.md).
