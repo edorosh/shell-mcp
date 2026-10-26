@@ -15,7 +15,8 @@
     "sandbox",
     "microsandbox",
     "shell",
-    "windows"
+    "windows",
+    "macos"
   ],
   "scripts": {
     "build": "tsc",
