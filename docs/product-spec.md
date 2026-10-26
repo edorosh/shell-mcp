@@ -380,8 +380,10 @@ server bridges the two deterministically.
   is the backend's and the user's responsibility; the instance MUST NOT widen
   it. In create mode the instance sets the mounts and the network policy
   exactly from the flags and MUST NOT widen them: the network is denied unless
-  `--allow-domain` or `--allow-network` says otherwise, and private addresses
-  are always blocked. (Amended v3.)
+  `--allow-domain` or `--allow-network` says otherwise, and no rule allows
+  private, LAN, loopback or host ranges. Whether an allowed domain that
+  resolves to a private address is reachable depends on the runtime and is
+  checked in the v3 spike. (Amended v3.)
 
 ## 12. Client integration
 

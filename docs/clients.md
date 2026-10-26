@@ -2,9 +2,12 @@
 
 Each client gets two things: the shell-mcp server entry, and its built-in shell
 turned off so the agent can only run commands through shell-mcp. The examples
-use sandbox `myproj`, host folder `C:\Users\<you>\dev\myproj` (on a Mac,
-`/Users/<you>/dev/myproj`) and guest path `/workspace` (see
-[Sandbox and runtime](sandbox.md)).
+use sandbox `myproj`, image `ubuntu:24.04`, and the host folder
+`C:\Users\<you>\dev\myproj` (on a Mac, `/Users/<you>/dev/myproj`) mounted at
+`/workspace`. shell-mcp creates the sandbox on first use (see
+[Sandbox and runtime](sandbox.md)). To attach to a sandbox you created yourself
+with `msb`, use `--host-root` and `--guest-root` instead of `--image` and
+`--mount`; see [Using a sandbox you created yourself](sandbox.md#using-a-sandbox-you-created-yourself).
 
 ## Claude Code
 
@@ -18,8 +21,8 @@ Put `.mcp.json` in your project (example: [examples/claude/.mcp.json](../example
       "args": [
         "/c", "npx", "-y", "@edorosh/shell-mcp@1.2.0",
         "--sandbox", "myproj",
-        "--host-root", "C:\\Users\\<you>\\dev\\myproj",
-        "--guest-root", "/workspace"
+        "--image", "ubuntu:24.04",
+        "--mount", "C:\\Users\\<you>\\dev\\myproj:/workspace"
       ]
     }
   }
@@ -38,8 +41,8 @@ On macOS, use `npx` directly, with the host folder as a literal path. If
       "args": [
         "-y", "@edorosh/shell-mcp@1.2.0",
         "--sandbox", "myproj",
-        "--host-root", "/Users/<you>/dev/myproj",
-        "--guest-root", "/workspace"
+        "--image", "ubuntu:24.04",
+        "--mount", "/Users/<you>/dev/myproj:/workspace"
       ]
     }
   }
@@ -49,7 +52,7 @@ On macOS, use `npx` directly, with the host folder as a literal path. If
 Or add it from the command line on Windows:
 
 ```powershell
-claude mcp add sandbox --scope project -- cmd /c npx -y @edorosh/shell-mcp@1.2.0 --sandbox myproj --host-root C:\Users\<you>\dev\myproj --guest-root /workspace
+claude mcp add sandbox --scope project -- cmd /c npx -y @edorosh/shell-mcp@1.2.0 --sandbox myproj --image ubuntu:24.04 --mount C:\Users\<you>\dev\myproj:/workspace
 ```
 
 `cmd /c` is what the Claude Code docs prescribe for `npx` on native Windows.
@@ -78,20 +81,20 @@ Put `.vscode/mcp.json` in your project (example:
       "args": [
         "-y", "@edorosh/shell-mcp@1.2.0",
         "--sandbox", "myproj",
-        "--host-root", "C:\\Users\\<you>\\dev\\myproj",
-        "--guest-root", "/workspace"
+        "--image", "ubuntu:24.04",
+        "--mount", "C:\\Users\\<you>\\dev\\myproj:/workspace"
       ]
     }
   }
 }
 ```
 
-On macOS the same file uses the host root `"/Users/<you>/dev/myproj"` (the
-`pwd -P` path if `~/dev` is a symlink); the rest is unchanged.
+On macOS the same file uses the mount `"/Users/<you>/dev/myproj:/workspace"`
+(the `pwd -P` path if `~/dev` is a symlink); the rest is unchanged.
 
 Use a literal host path: VS Code does not substitute `${workspaceFolder}` in
-`args` (shell-mcp would get the literal string and exit with "host-root must be
-an absolute path").
+`args` (shell-mcp would get the literal string and exit with "mount host path must
+be absolute").
 
 ### Turning off Copilot's built-in shell
 

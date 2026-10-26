@@ -69,7 +69,9 @@ npx -y @edorosh/shell-mcp@1.2.0 --sandbox myproj --image ubuntu:24.04 --mount /U
 a sandbox that does not exist, and never creates, starts or recreates one.
 
 **Network.** The sandbox has no network access by default, and private
-addresses (LAN, loopback) stay blocked whatever you allow. `--allow-domain
+addresses are never opened: no rule allows private, LAN, loopback or host
+ranges. Whether an allowed domain that resolves to a private address is
+reachable depends on the runtime and is still being checked. `--allow-domain
 HOST` (repeatable, a host or a suffix such as `*.example.com`) opens single
 hosts; `--allow-network` opens all public hosts. Add mounts, `--cpus` and
 `--memory` the same way:

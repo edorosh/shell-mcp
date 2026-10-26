@@ -27,7 +27,10 @@ background, so a `shell` call made during the first image pull returns `sandbox
 Retry the call. To do the first pull in a terminal, run the same flags with
 `--prepare` (see [Sandbox and runtime](sandbox.md#create-mode)). If the
 preparation fails (no network for the pull, unknown image, runtime missing),
-the call returns that error and the next call tries again.
+the call returns that error and the next call tries again. A provisioning
+attempt that never ends (a hung pull) needs a client restart. If two clients
+create the same sandbox at the same moment, one may show a one-time
+name-conflict error; the next call recovers.
 
 ## The sandbox "was created with different settings"
 
