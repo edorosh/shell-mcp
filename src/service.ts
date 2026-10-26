@@ -16,6 +16,7 @@ const isSandboxState = (k: BackendError["kind"]) =>
 export function backendErrorText(err: BackendError, sandbox: string, create = false): string {
   if (create) {
     // Create mode starts the sandbox itself on the next call: never point at msb.
+    if (err.kind === "not_found") return `sandbox "${sandbox}" does not exist any more; the next call creates it again.`;
     if (err.kind === "not_running") return `sandbox "${sandbox}" is not running; the next call starts it again.`;
     if (err.kind === "unreachable") return `sandbox "${sandbox}" is unreachable: ${err.message}. The next call retries.`;
   }

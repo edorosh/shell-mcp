@@ -27,6 +27,19 @@ function diff(a: string[], b: string[], fold: (s: string) => string): string[] {
   return a.filter((n) => !other.has(fold(n)));
 }
 
+/** Races `p` against a deadline; the backend applies its own timeout only after connecting, so guard a hang. */
+async function withDeadline<T>(p: Promise<T>, ms: number): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const noResponse = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new NoResponse()), ms);
+  });
+  try {
+    return await Promise.race([p, noResponse]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 const names = (xs: string[]) => {
   const shown = xs.slice(0, 5).join(", ");
   return xs.length > 5 ? `${shown} (+${xs.length - 5} more)` : shown;
@@ -47,7 +60,8 @@ export async function runCheck(config: Config, deps: CheckDeps, write: (line: st
   };
   const skipped = (step: string, why: string) => write(`skipped ${step}: ${why}`);
 
-  ok("config", `sandbox "${config.sandbox}", mounts ${config.mounts.map((m) => `${m.host} -> ${m.guest}`).join(", ")}`);
+  if (create) ok("config", `sandbox "${config.sandbox}", mounts ${config.mounts.map((m) => `${m.host} -> ${m.guest}`).join(", ")}`);
+  else ok("config", `sandbox "${config.sandbox}", host root ${config.mounts[0].host}, guest root ${config.mounts[0].guest}`);
 
   // 2. native module
   try {
@@ -69,9 +83,10 @@ export async function runCheck(config: Config, deps: CheckDeps, write: (line: st
   }
 
   // 3b. create mode: the sandbox exists and matches the flags (read-only)
+  const limit = deps.timeoutMs ?? CHECK_TIMEOUT_MS + 5_000;
   if (create && deps.inspect) {
     try {
-      const r = await deps.inspect();
+      const r = await withDeadline(deps.inspect(), limit);
       if (r.state === "absent") {
         fail("sandbox", `"${config.sandbox}" is not created yet; run with --prepare`);
         for (const s of ["shell", "mount"]) skipped(s, "sandbox failed");
@@ -84,7 +99,7 @@ export async function runCheck(config: Config, deps: CheckDeps, write: (line: st
       }
       ok("definition", "matches the flags");
     } catch (e) {
-      fail("definition", msg(e));
+      fail("definition", e instanceof NoResponse ? `no response within ${Math.round(limit / 1000)}s from "${config.sandbox}"; check the sandbox state` : msg(e));
       for (const s of ["sandbox", "shell", "mount"]) skipped(s, "definition failed");
       return 1;
     }
@@ -92,18 +107,8 @@ export async function runCheck(config: Config, deps: CheckDeps, write: (line: st
 
   // 4 and 5: one `uname -s` run
   let uname: Awaited<ReturnType<Backend["run"]>> | undefined;
-  const limit = deps.timeoutMs ?? CHECK_TIMEOUT_MS + 5_000;
   try {
-    // The backend applies its timeout only after connecting, so guard a connect that never returns.
-    let timer: NodeJS.Timeout | undefined;
-    const noResponse = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => reject(new NoResponse()), limit);
-    });
-    try {
-      uname = await Promise.race([deps.backend.run("uname -s", { timeoutMs: CHECK_TIMEOUT_MS }), noResponse]);
-    } finally {
-      clearTimeout(timer);
-    }
+    uname = await withDeadline(deps.backend.run("uname -s", { timeoutMs: CHECK_TIMEOUT_MS }), limit);
   } catch (e) {
     if (e instanceof NoResponse) {
       fail("sandbox", `no response within ${Math.round(limit / 1000)}s from "${config.sandbox}"; check the sandbox state`);
@@ -118,7 +123,10 @@ export async function runCheck(config: Config, deps: CheckDeps, write: (line: st
       return 1;
     }
     const err = e instanceof BackendError ? e : new BackendError("outcome_unknown", msg(e));
-    fail("sandbox", backendErrorText(err, config.sandbox, create));
+    // --check never starts a sandbox, so the create-mode "next call starts it" wording does not fit here.
+    fail("sandbox", create && err.kind === "not_running"
+      ? `sandbox "${config.sandbox}" is not running; run with --prepare or start the client`
+      : backendErrorText(err, config.sandbox, create));
     skipped("shell", "sandbox failed");
     skipped("mount", "sandbox failed");
     return 1;
@@ -165,7 +173,7 @@ export async function runCheck(config: Config, deps: CheckDeps, write: (line: st
       }
     } catch (e) {
       const err = e instanceof BackendError ? e : undefined;
-      fail("mount", err ? backendErrorText(err, config.sandbox) : msg(e));
+      fail("mount", err ? backendErrorText(err, config.sandbox, create) : msg(e));
     }
   }
   return failed ? 1 : 0;

@@ -214,9 +214,10 @@ describe("runCheck connect guard", () => {
     const config = cfg({ mounts: [
       { host: "/home/me/proj", hostResolved: "/home/me/proj", guest: "/workspace", readonly: false },
       { host: "/home/me/data", hostResolved: "/home/me/data", guest: "/data", readonly: true },
-    ] });
+    ], machine: { image: "i", allowDomains: [], allowNetwork: false } });
     const code = await runCheck(config, {
       loadSdk: async () => ({}), backend: fb, runtime: async () => okRuntime, readdir: async () => ["a", "b"],
+      inspect: async () => ({ state: "ok", status: "running" }),
     }, (l) => lines.push(l));
     expect(code).toBe(1);
     expect(lines.filter((l) => l.includes(" mount:"))).toHaveLength(2);
@@ -225,6 +226,22 @@ describe("runCheck connect guard", () => {
     expect(failed).toContain("/data");
     expect(failed).toContain("/home/me/data");
     expect(lines[0]).toContain("/home/me/proj -> /workspace, /home/me/data -> /data");
+  });
+});
+
+describe("runCheck config line", () => {
+  it("keeps the 1.1.0 wording in attach mode", async () => {
+    const { fb, run } = setup();
+    fb.queueRun(out("Linux\n")).queueRun(out("a\nb\n"));
+    const { lines } = await run();
+    expect(lines[0]).toBe('ok      config: sandbox "dev", host root /home/me/proj, guest root /workspace');
+  });
+
+  it("lists the mounts in create mode", async () => {
+    const { fb, run } = setup({ config: cfg({ machine: { image: "i", allowDomains: [], allowNetwork: false } }), inspect: async () => ({ state: "ok", status: "running" }) });
+    fb.queueRun(out("Linux\n")).queueRun(out("a\nb\n"));
+    const { lines } = await run();
+    expect(lines[0]).toBe('ok      config: sandbox "dev", mounts /home/me/proj -> /workspace');
   });
 });
 
@@ -258,6 +275,36 @@ describe("runCheck in create mode", () => {
     expect(lines).toContain("ok      definition: matches the flags");
     expect(lines.findIndex((l) => l.includes(" runtime:"))).toBeLessThan(lines.findIndex((l) => l.includes(" definition:")));
     expect(lines.findIndex((l) => l.includes(" definition:"))).toBeLessThan(lines.findIndex((l) => l.includes(" sandbox:")));
+  });
+
+  it("says run with --prepare for a matching but stopped sandbox, in the sandbox and mount steps' wording", async () => {
+    const { fb, run } = setup({ config: create(), inspect: async () => ({ state: "ok", status: "stopped" }) });
+    fb.queueRun(new BackendError("not_running", "stopped"));
+    const { code, lines } = await run();
+    expect(code).toBe(1);
+    expect(line(lines, "sandbox")).toBe('FAIL    sandbox: sandbox "dev" is not running; run with --prepare or start the client');
+    expect(lines.join("\n")).not.toContain("next call");
+  });
+
+  it("uses create wording in the mount step", async () => {
+    const { fb, run } = setup({ config: create(), inspect: async () => ({ state: "ok", status: "running" }) });
+    fb.queueRun(out("Linux\n")).queueRun(new BackendError("unreachable", "gone"));
+    const { lines } = await run();
+    expect(line(lines, "mount")).toContain("The next call retries.");
+    expect(line(lines, "mount")).not.toContain("msb");
+  });
+
+  it("guards a hanging inspect with the same deadline", async () => {
+    const fb = new FakeBackend();
+    const lines: string[] = [];
+    const code = await runCheck(create(), {
+      loadSdk: async () => ({}), backend: fb, runtime: async () => okRuntime, readdir: async () => [],
+      inspect: () => new Promise(() => {}), timeoutMs: 20,
+    }, (l) => lines.push(l));
+    expect(code).toBe(1);
+    expect(lines.some((l) => l.startsWith("FAIL    definition: no response within"))).toBe(true);
+    expect(lines).toContain("skipped shell: definition failed");
+    expect(fb.runs).toEqual([]);
   });
 
   it("has no definition step in attach mode", async () => {

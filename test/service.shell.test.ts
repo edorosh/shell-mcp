@@ -123,6 +123,8 @@ describe("ShellService.shell foreground", () => {
     expect((await c.svc.shell({ command: "x" })).text).toBe('Command was not started: sandbox "sb" is not running; the next call starts it again.');
     c.fb.queueRun(new BackendError("unreachable", "pull failed: unknown image"));
     expect((await c.svc.shell({ command: "x" })).text).toBe('Command was not started: sandbox "sb" is unreachable: pull failed: unknown image. The next call retries.');
+    c.fb.queueRun(new BackendError("not_found", "nope"));
+    expect((await c.svc.shell({ command: "x" })).text).toBe('Command was not started: sandbox "sb" does not exist any more; the next call creates it again.');
     const a = setup();
     a.fb.queueRun(new BackendError("not_running", "stopped"));
     expect((await a.svc.shell({ command: "x" })).text).toBe('Command was not started: sandbox "sb" is not running. Start it with: msb start sb');
