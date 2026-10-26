@@ -36,7 +36,7 @@ export class ShellService {
     protected readonly backend: Backend,
     deps: { nonce?: string; progressIntervalMs?: number; now?: () => Date } = {},
   ) {
-    this.paths = new PathMapper(cfg.hostRoot, cfg.guestRoot, cfg.platform);
+    this.paths = new PathMapper([{ host: cfg.hostRoot, guest: cfg.guestRoot }], cfg.platform);
     this.nonce = deps.nonce ?? newNonce();
     this.progressIntervalMs = deps.progressIntervalMs ?? 15_000;
     this.jobs = new JobRegistry(deps.now);
