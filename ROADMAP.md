@@ -52,6 +52,30 @@ building the repo.
 - Verify each untested client option in the [client support](#client-support)
   table, or remove it from the docs.
 
+## v2.1: macOS hosts
+
+Status: specified; spike passed on an Apple Silicon Mac (2026-10-26). Ships as
+npm version `1.1.0`. Takes on the macOS half of N6.
+Design: [v2.1 macOS design](docs/superpowers/specs/2026-10-26-shell-mcp-v2.1-macos-design.md).
+Spike: [v2.1 macOS spike results](docs/superpowers/specs/v2.1-macos-spike-results.md).
+
+Goal: a developer on an Apple Silicon Mac installs and runs shell-mcp from npm
+the same way a Windows user does, with no separate `msb` install.
+
+- Supported: Apple Silicon with an arm64 Node. The pinned SDK ships no Intel
+  macOS package; on an Intel Mac or under Rosetta, `--check` and the startup
+  log say so instead of the generic reinstall hint.
+- CI runs typecheck, build, unit tests and the pack check on macOS as well.
+- Docs for macOS: creating the sandbox with the bundled `msb`
+  (`npx -y -p microsandbox@<sdk version> msb ...`) and the resolved project path
+  (`msb` refuses mounts through a symlink), arm64 images, the guest seeing the
+  Mac's case-insensitive file system, and client configs with `/Users/<you>/...`.
+- Mark Claude Code, Copilot and the `deny-shell.sh` hook verified on macOS.
+
+Done when: with the published 1.1.0 on an Apple Silicon Mac, `--check` passes,
+the acceptance suite passes 12 of 12, and Claude Code and Copilot run
+`uname -a` in the sandbox with the built-in shell turned off.
+
 ## v3: Sandbox created from the MCP config
 
 Status: idea.
@@ -79,22 +103,24 @@ Done when: a user with only `msb` installed adds one MCP config entry, and the
 first `shell` call runs in a sandbox shell-mcp created, with the project folder
 mounted.
 
-## v4: Linux and macOS hosts
+## v4: Linux hosts
 
-Status: idea. Takes on N6.
+Status: idea. Takes on the rest of N6 (macOS is v2.1).
 
-Goal: shell-mcp runs on Linux and macOS hosts as well as Windows.
+Goal: shell-mcp runs on Linux hosts as well as Windows and macOS.
 
-- Path translation for POSIX host paths.
-- CI runs the test suite on Windows, Linux and macOS.
-- Test the Linux/macOS Copilot hook (`deny-shell.sh`) with a real client.
+- Path translation for POSIX host paths (already used on macOS since v2.1).
+- Run the acceptance suite on a Linux host; CI already runs the unit tests
+  there.
+- Test the Copilot hook (`deny-shell.sh`) with a real client on Linux
+  (verified on macOS in v2.1).
 - npm stays the install method on every host. A Homebrew formula in our own
   tap is optional, only if macOS users ask for it: it would still wrap npm,
   and `brew upgrade` would undo the exact version pin that keeps the SDK and
   `msb` matched.
 
-Done when: the acceptance suite passes on a Linux and a macOS host with Claude
-Code and Copilot.
+Done when: the acceptance suite passes on a Linux host with Claude Code and
+Copilot.
 
 ## Later (unscheduled)
 
@@ -114,7 +140,9 @@ to a milestone yet.
 | Client | Host | Status |
 |--------|------|--------|
 | Claude Code | Windows | Verified |
+| Claude Code | macOS (Apple Silicon) | Verified in the v2.1 spike with 1.0.2 |
 | GitHub Copilot in VS Code | Windows | Verified, including the hook that turns off the built-in shell |
-| GitHub Copilot hook (`deny-shell.sh`) | Linux, macOS | Untested |
+| GitHub Copilot in VS Code | macOS (Apple Silicon) | Verified in the v2.1 spike with 1.0.2, including `deny-shell.sh` |
+| GitHub Copilot hook (`deny-shell.sh`) | Linux | Untested |
 | Local-harness agent file | Windows | Untested |
 | Copilot CLI with `--deny-tool` | Windows | Untested |
