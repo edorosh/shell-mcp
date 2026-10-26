@@ -244,5 +244,6 @@ export function parseCli(
   const config = parseConfig(argv.filter((a) => a !== "--check" && a !== "--prepare"), env, opts);
   if (check && config.recreate) throw new ConfigError("--recreate cannot be used with --check");
   if (check) return { mode: "check", config };
+  if (prepare && !config.machine) throw new ConfigError("--prepare needs --image");
   return prepare ? { mode: "prepare", config } : { mode: "serve", config };
 }

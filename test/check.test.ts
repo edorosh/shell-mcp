@@ -273,4 +273,20 @@ describe("runCheck in create mode", () => {
     const { lines } = await run();
     expect(line(lines, "shell")).toContain("the image must contain bash, or your --shell");
   });
+
+  it("fails the definition step when inspect throws", async () => {
+    const { fb, run } = setup({ config: create(), inspect: async () => { throw new Error("boom"); } });
+    const { code, lines } = await run();
+    expect(code).toBe(1);
+    expect(lines).toContain("FAIL    definition: boom");
+    expect(lines).toContain("skipped sandbox: definition failed");
+    expect(fb.runs).toEqual([]);
+  });
+
+  it("skips runtime, definition, sandbox, shell and mount when the native module fails", async () => {
+    const { run } = setup({ config: create(), sdk: async () => { throw new Error("no native"); }, inspect: async () => ({ state: "absent" }) });
+    const { code, lines } = await run();
+    expect(code).toBe(1);
+    for (const s of ["runtime", "definition", "sandbox", "shell", "mount"]) expect(lines).toContain(`skipped ${s}: native module failed`);
+  });
 });

@@ -7,11 +7,11 @@ import type { Provisioner } from "./backend/provision.js";
 export async function runPrepare(
   p: Pick<Provisioner, "ensure">,
   write: (line: string) => void,
-  sandbox?: string,
+  sandbox: string,
 ): Promise<0 | 1> {
   try {
     await p.ensure(write);
-    write(`ready: sandbox ${sandbox === undefined ? "" : `"${sandbox}" `}is running`);
+    write(`ready: sandbox "${sandbox}" is running`);
     return 0;
   } catch (e) {
     write(`FAIL ${e instanceof Error ? e.message : String(e)}`);

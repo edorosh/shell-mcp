@@ -2,6 +2,7 @@ import { execSync, spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
+import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { beforeAll, describe, expect, it } from "vitest";
 
@@ -31,6 +32,10 @@ function runNode(args: string[], input?: string, waitFor?: (out: string) => bool
     else child.stdin.end();
   });
 }
+
+// Create-mode runs use a unique throwaway sandbox name and an image under the never-resolving
+// `.invalid` TLD, so a pull fails and no real sandbox is ever created on CI hosts.
+const throwaway = () => ["--sandbox", `shell-mcp-unit-${randomUUID().slice(0, 8)}`, "--image", "invalid.invalid/shell-mcp-unit:0", "--mount", `${tmpdir()}:/workspace`];
 
 describe("entry point", () => {
   beforeAll(() => {
@@ -115,21 +120,30 @@ describe("entry point", () => {
       { jsonrpc: "2.0", method: "notifications/initialized" },
       { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} },
     ];
-    const r = await runNode(
-      ["--sandbox", "s", "--image", "ubuntu:24.04", "--mount", `${tmpdir()}:/workspace`],
-      msgs.map((m) => JSON.stringify(m)).join("\n") + "\n",
-      (out) => out.includes('"id":2'),
-    );
-    expect(r.stderr).toContain('create mode, sandbox "s", image ubuntu:24.04');
+    const args = throwaway();
+    const r = await runNode(args, msgs.map((m) => JSON.stringify(m)).join("\n") + "\n", (out) => out.includes('"id":2'));
+    expect(r.stderr).toContain(`create mode, sandbox "${args[1]}", image invalid.invalid/shell-mcp-unit:0`);
     for (const l of r.stdout.trim().split("\n")) expect(() => JSON.parse(l)).not.toThrow();
   });
 
-  it("--prepare and --check never write MCP to stdout", async () => {
-    const args = ["--sandbox", "no-such-sandbox-shell-mcp-test", "--image", "ubuntu:24.04", "--mount", `${tmpdir()}:/workspace`];
-    for (const mode of ["--prepare", "--check"]) {
-      const r = await runNode([mode, ...args]);
-      expect(r.stdout).not.toContain("jsonrpc");
-      expect(r.code).not.toBeNull();
-    }
+  it("--prepare fails on an unresolvable image without writing MCP", async () => {
+    const r = await runNode(["--prepare", ...throwaway()]);
+    expect(r.code).toBe(1);
+    expect(r.stdout).toMatch(/^FAIL/m);
+    expect(r.stdout).not.toContain("jsonrpc");
   }, 30_000);
+
+  it("create-mode --check reports the sandbox as not created, without writing MCP", async () => {
+    const r = await runNode(["--check", ...throwaway()]);
+    expect(r.code).toBe(1);
+    expect(r.stdout).toContain("not created yet; run with --prepare");
+    expect(r.stdout).not.toContain("jsonrpc");
+  }, 30_000);
+
+  it("--prepare without --image is a config error on stderr", async () => {
+    const r = await runNode(["--prepare", "--sandbox", "x", "--host-root", tmpdir(), "--guest-root", "/workspace"]);
+    expect(r.code).toBe(1);
+    expect(r.stderr).toContain("--prepare needs --image");
+    expect(r.stdout).toBe("");
+  });
 });

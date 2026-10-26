@@ -154,6 +154,9 @@ describe("create mode", () => {
   it("rejects a missing mount host path", () => {
     expect(() => parseConfig(img, {}, { ...create, exists: () => false })).toThrow(/does not exist/);
   });
+  it("rejects --prepare without --image", () => {
+    expect(() => parseCli(["--prepare", "--sandbox", "s", "--host-root", "/h", "--guest-root", "/w"], {}, create)).toThrow("--prepare needs --image");
+  });
   it("rejects --recreate with --check", () => {
     expect(() => parseCli(["--check", ...img, "--recreate"], {}, create)).toThrow(ConfigError);
   });
