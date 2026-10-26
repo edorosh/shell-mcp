@@ -28,7 +28,7 @@ Known issues:
 ## v2: npm package for easy install on Windows
 
 Status: done. 1.0.0 published 2026-10-25; 1.0.1 was the first CI release
-with trusted publishing; current release 1.0.2. Milestone numbers and package
+with trusted publishing; 1.0.2 was the last v2 release. Milestone numbers and package
 versions are unrelated. Spec: [product-spec.md](docs/product-spec.md) (C10 to
 C12, B5, §12a).
 Design: [v2 npm distribution design](docs/superpowers/specs/2026-10-25-shell-mcp-v2-npm-design.md).
@@ -54,8 +54,8 @@ building the repo.
 
 ## v2.1: macOS hosts
 
-Status: done in code; ships as npm 1.1.0 once the v1.1.0 tag is pushed.
-Release check on a Mac pending.
+Status: done (2026-10-26). Released as npm 1.1.0; `--check` with the
+published package passes on an Apple Silicon Mac.
 Takes on the macOS half of N6.
 Design: [v2.1 macOS design](docs/superpowers/specs/2026-10-26-shell-mcp-v2.1-macos-design.md).
 Spike: [v2.1 macOS spike results](docs/superpowers/specs/v2.1-macos-spike-results.md).
