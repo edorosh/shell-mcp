@@ -20,7 +20,7 @@ Windows hosts only; see [Status](#status).
   with `bash` installed in its image. The configured shell (default `bash`) is
   the only shell used, with no `sh` fallback.
 - A microsandbox runtime (`msb`) at the version matching the pinned SDK.
-  `@edorosh/shell-mcp` 1.0.0 pins `microsandbox` (npm SDK) at exactly
+  `@edorosh/shell-mcp` 1.0.2 pins `microsandbox` (npm SDK) at exactly
   **0.7.11**; the tested pair is `microsandbox` 0.7.11 with `msb` 0.7.11 on
   Windows (see [spike-results.md](docs/superpowers/specs/spike-results.md)).
   shell-mcp uses the `msb` in your microsandbox home if you have one, and the
@@ -32,13 +32,13 @@ Windows hosts only; see [Status](#status).
 Nothing to clone or build. Warm the npx cache and confirm the package runs:
 
 ```powershell
-npx -y @edorosh/shell-mcp@1.0.0 --version
+npx -y @edorosh/shell-mcp@1.0.2 --version
 ```
 
 **Do not use `npx shell-mcp`.** The npm name `shell-mcp` belongs to an unrelated
 package; always use the scoped name `@edorosh/shell-mcp` with a version.
 
-The client configs below run `npx -y @edorosh/shell-mcp@1.0.0 ...`. That form
+The client configs below run `npx -y @edorosh/shell-mcp@1.0.2 ...`. That form
 contacts the npm registry on every start, so it does not start offline. To
 start offline and instantly, use the [global install](#global-install).
 
@@ -50,7 +50,7 @@ example `ubuntu:24.04`.
 
 **You already have a separate `msb` install** (the `msb` in your microsandbox
 home; shell-mcp uses it). Create the sandbox as usual. Its version must match
-the SDK (0.7.11 for shell-mcp 1.0.0); `--check` verifies this.
+the SDK (0.7.11 for shell-mcp 1.0.2); `--check` verifies this.
 
 ```powershell
 msb create ubuntu:24.04 --name myproj --mount-dir C:\Users\eugen\dev\myproj:/workspace
@@ -75,7 +75,7 @@ native module, the runtime version, that the sandbox is reachable, that the
 shell runs and that the host folder is mounted at the guest path:
 
 ```powershell
-npx -y @edorosh/shell-mcp@1.0.0 --sandbox myproj --host-root C:\Users\eugen\dev\myproj --guest-root /workspace --check
+npx -y @edorosh/shell-mcp@1.0.2 --sandbox myproj --host-root C:\Users\eugen\dev\myproj --guest-root /workspace --check
 ```
 
 ## Claude Code
@@ -88,7 +88,7 @@ Put `.mcp.json` in your project (example: [examples/claude/.mcp.json](examples/c
     "sandbox": {
       "command": "cmd",
       "args": [
-        "/c", "npx", "-y", "@edorosh/shell-mcp@1.0.0",
+        "/c", "npx", "-y", "@edorosh/shell-mcp@1.0.2",
         "--sandbox", "myproj",
         "--host-root", "C:\\Users\\eugen\\dev\\myproj",
         "--guest-root", "/workspace"
@@ -101,7 +101,7 @@ Put `.mcp.json` in your project (example: [examples/claude/.mcp.json](examples/c
 Or add it from the command line:
 
 ```powershell
-claude mcp add sandbox --scope project -- cmd /c npx -y @edorosh/shell-mcp@1.0.0 --sandbox myproj --host-root C:\Users\eugen\dev\myproj --guest-root /workspace
+claude mcp add sandbox --scope project -- cmd /c npx -y @edorosh/shell-mcp@1.0.2 --sandbox myproj --host-root C:\Users\eugen\dev\myproj --guest-root /workspace
 ```
 
 `cmd /c` is what the Claude Code docs prescribe for `npx` on native Windows.
@@ -129,7 +129,7 @@ Put `.vscode/mcp.json` in your project (example:
       "type": "stdio",
       "command": "npx",
       "args": [
-        "-y", "@edorosh/shell-mcp@1.0.0",
+        "-y", "@edorosh/shell-mcp@1.0.2",
         "--sandbox", "myproj",
         "--host-root", "C:\\Users\\eugen\\dev\\myproj",
         "--guest-root", "/workspace"
@@ -199,7 +199,7 @@ References: [VS Code: use tools with agents](https://code.visualstudio.com/docs/
 ## Copilot CLI
 
 Add the server with `/mcp add`, using the same command and arguments as the
-VS Code example (`npx` with `-y @edorosh/shell-mcp@1.0.0 --sandbox ...`) and
+VS Code example (`npx` with `-y @edorosh/shell-mcp@1.0.2 --sandbox ...`) and
 the name `/mcp` shows. The CLI does not read `.vscode/mcp.json`. To deny the
 built-in shell and allow shell-mcp per session (deny rules win over every allow
 rule, including `--allow-all-tools`):
@@ -214,7 +214,7 @@ Unverified on Windows: whether the CLI's PowerShell tool is also covered by
 
 ## Upgrading
 
-Change the version in the client config (for example `@edorosh/shell-mcp@1.0.1`)
+Change the version in the client config (for example `@edorosh/shell-mcp@1.0.2`)
 and run `--check` with the new version. [CHANGELOG.md](CHANGELOG.md) lists the
 `msb` version each release expects; if it changed, recreate or update `msb` to
 match. Close running clients first (see
@@ -223,11 +223,11 @@ match. Close running clients first (see
 ## Global install
 
 ```powershell
-npm i -g @edorosh/shell-mcp@1.0.0
+npm i -g @edorosh/shell-mcp@1.0.2
 ```
 
 Then use `shell-mcp` as the command, with the same arguments as above and
-without `npx -y @edorosh/shell-mcp@1.0.0`: in `.vscode/mcp.json`
+without `npx -y @edorosh/shell-mcp@1.0.2`: in `.vscode/mcp.json`
 `"command": "shell-mcp"`, and in Claude Code's `.mcp.json`
 `"command": "cmd", "args": ["/c", "shell-mcp", "--sandbox", ...]`. The global
 install starts instantly and works offline.
