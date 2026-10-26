@@ -54,11 +54,22 @@ Probe: a TCP connect only (`exec 3<>/dev/tcp/host/port`).
 
 - When no policy is set, the stored `network` has no `policy` key and every probe connects.
   shell-mcp must therefore always set a policy, and it does.
-- **Open:** under the deny policy, 192.168.1.1:80 still connects. A connect probe cannot tell
-  whether the sandbox's network stack accepted the connection itself or a LAN device answered. The
-  probe now sends an HTTP request and prints the reply. It also takes extra `host:port` targets,
-  such as the router's address. Re-run before release. Until that run, the docs claim that private
-  addresses are blocked is unverified.
+- Under the deny policy, 192.168.1.1:80 also connected (in 4 to 15 ms). A second run with a
+  reply probe settled it: the HTTP request goes out on port 80 and the first bytes of the reply are
+  read back.
+
+  | Target (port 80) | Reply |
+  | --- | --- |
+  | example.com (allowed) | `HTTP/1.1 200 OK` from the real server |
+  | www.iana.org (denied) | `HTTP/1.1 403 Forbidden`, `Content-Type: ap...` |
+  | 192.168.1.1, the LAN router (denied) | the same 403 |
+  | 10.0.0.1, which does not exist (denied) | the same 403 |
+
+  The 403 replies are microsandbox's own deny response (`network.http.denyResponse: true`,
+  format `json`). A host that does not exist gets it too, so the request never reached the
+  router: the sandbox's network stack accepts the connection, then answers with the deny response.
+  The earlier connect-only probe could not tell these apart. On a non-HTTP port (443), a denied
+  host is refused outright. **Private addresses are blocked.**
 
 ### 7.5 Stop, start, remove
 
@@ -90,8 +101,7 @@ Results match Windows on every point:
   - www.iana.org is refused;
   - 192.168.1.1:80 connects, in 1 to 2 ms.
 
-  With no policy set, all three connect. The 192.168.1.1 question stays open; it was run with
-  the old connect-only probe.
+  With no policy set, all three connect. The LAN reply probe was run only on Windows (see above).
 - **Stop, start, remove:**
   - `stop` takes about 55 ms, then the status is `stopped`;
   - `startDetached` takes about 0.14 s, and the policy survives the restart;
@@ -101,4 +111,5 @@ Results match Windows on every point:
 
 ## Integration suite (`test/integration.create.test.ts`)
 
-Not run yet, on either host.
+- Windows: 6/6 pass, in 3.8 s.
+- Mac: not run yet.
