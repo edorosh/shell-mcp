@@ -6,7 +6,10 @@ const factory = vi.hoisted(() => vi.fn(() => ({
 })));
 vi.mock("microsandbox", factory);
 
-import { checkRuntime, runtimeLogLine, type RuntimeDeps } from "../src/runtime.js";
+import { checkRuntime, nativeHint, runtimeLogLine, type RuntimeDeps } from "../src/runtime.js";
+
+const LINUX = { platform: "linux", arch: "x64" } as const;
+const MAC_MSG = "macOS needs Apple Silicon and an arm64 Node (this Node is x64: an Intel Mac, or Node running under Rosetta)";
 
 const deps = (version: string | null | Error, origin = "home"): RuntimeDeps => ({
   resolveRuntime: () => ({ msbPath: "C:\\x\\msb.exe", origin }),
@@ -51,14 +54,14 @@ describe("checkRuntime", () => {
       },
       resolveRuntimeVersion: async () => "0.7.11",
     };
-    expect(await checkRuntime("0.7.11", d)).toEqual({
+    expect(await checkRuntime("0.7.11", d, LINUX)).toEqual({
       ok: false,
       message: "no msb; reinstall shell-mcp without --omit=optional on this OS and CPU",
     });
   });
 
   it("treats a rejected version read like a resolve failure", async () => {
-    const r = await checkRuntime("0.7.11", deps(new Error("bad exe")));
+    const r = await checkRuntime("0.7.11", deps(new Error("bad exe")), LINUX);
     expect(r).toEqual({
       ok: false,
       message: "bad exe; reinstall shell-mcp without --omit=optional on this OS and CPU",
@@ -97,4 +100,26 @@ describe("runtimeLogLine", () => {
   it("formats a resolve failure", () => {
     expect(runtimeLogLine({ ok: false, message: "boom" })).toBe("warning: boom; run shell-mcp --check");
   });
+});
+
+describe("nativeHint", () => {
+  it("names Apple Silicon on darwin/x64", () => {
+    expect(nativeHint("darwin", "x64")).toBe(MAC_MSG);
+  });
+  it.each([["darwin", "arm64"], ["linux", "x64"], ["win32", "x64"], ["win32", "arm64"]] as const)(
+    "keeps the reinstall hint on %s/%s", (p, a) => {
+      expect(nativeHint(p, a)).toBe("reinstall shell-mcp without --omit=optional on this OS and CPU");
+    });
+});
+
+it("uses the Apple Silicon hint when no runtime resolves on darwin/x64", async () => {
+  const d: RuntimeDeps = {
+    resolveRuntime: () => {
+      throw new Error("no msb");
+    },
+    resolveRuntimeVersion: async () => "0.7.11",
+  };
+  const r = await checkRuntime("0.7.11", d, { platform: "darwin", arch: "x64" });
+  expect(r).toEqual({ ok: false, message: `no msb; ${MAC_MSG}` });
+  expect(runtimeLogLine(r)).toContain("macOS needs Apple Silicon");
 });

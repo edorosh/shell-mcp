@@ -14,10 +14,21 @@ async function defaultDeps(): Promise<RuntimeDeps> {
 }
 
 const text = (e: unknown) => (e instanceof Error ? e.message : String(e));
-const hint = (e: unknown) => `${text(e)}; reinstall shell-mcp without --omit=optional on this OS and CPU`;
+
+/** Explains a native-module or runtime failure; an x64 Mac has no microsandbox build. */
+export function nativeHint(platform: NodeJS.Platform = process.platform, arch: NodeJS.Architecture = process.arch): string {
+  return platform === "darwin" && arch === "x64"
+    ? "macOS needs Apple Silicon and an arm64 Node (this Node is x64: an Intel Mac, or Node running under Rosetta)"
+    : "reinstall shell-mcp without --omit=optional on this OS and CPU";
+}
 
 /** Compares the msb the SDK will use against the SDK version it is pinned to. */
-export async function checkRuntime(sdkVersion: string, deps?: RuntimeDeps): Promise<RuntimeCheck> {
+export async function checkRuntime(
+  sdkVersion: string,
+  deps?: RuntimeDeps,
+  host: { platform: NodeJS.Platform; arch: NodeJS.Architecture } = { platform: process.platform, arch: process.arch },
+): Promise<RuntimeCheck> {
+  const hint = (e: unknown) => `${text(e)}; ${nativeHint(host.platform, host.arch)}`;
   const d = deps ?? (await defaultDeps());
   let resolved: { msbPath: string; origin: string };
   try {

@@ -13,7 +13,7 @@ const cfg = (over: Partial<Config> = {}): Config => ({
 const out = (output: string) => ({ output, exitCode: 0, timedOut: false, droppedChars: 0 });
 const okRuntime: RuntimeCheck = { ok: true, origin: "packaged", msbPath: "/x/msb", version: "0.7.11" };
 
-function setup(o: { fb?: FakeBackend; sdk?: () => Promise<unknown>; runtime?: RuntimeCheck; host?: string[]; config?: Config } = {}) {
+function setup(o: { fb?: FakeBackend; sdk?: () => Promise<unknown>; runtime?: RuntimeCheck; host?: string[]; config?: Config; arch?: NodeJS.Architecture } = {}) {
   const fb = o.fb ?? new FakeBackend();
   const lines: string[] = [];
   const deps: CheckDeps = {
@@ -21,6 +21,7 @@ function setup(o: { fb?: FakeBackend; sdk?: () => Promise<unknown>; runtime?: Ru
     backend: fb,
     runtime: async () => o.runtime ?? okRuntime,
     readdir: async () => o.host ?? ["a", "b"],
+    arch: o.arch,
   };
   const run = async () => {
     const code = await runCheck(o.config ?? cfg(), deps, (l) => lines.push(l));
@@ -48,8 +49,21 @@ describe("runCheck", () => {
     onlyAllowedCalls(fb);
   });
 
+  it("fails the native step with the Apple Silicon hint on darwin/x64", async () => {
+    const { run } = setup({ sdk: async () => { throw new Error("cannot find module"); }, config: cfg({ platform: "darwin" }), arch: "x64" });
+    const { code, lines } = await run();
+    expect(code).toBe(1);
+    expect(line(lines, "native module")).toBe("FAIL    native module: cannot find module; macOS needs Apple Silicon and an arm64 Node (this Node is x64: an Intel Mac, or Node running under Rosetta)");
+  });
+
+  it("keeps the reinstall hint on darwin/arm64", async () => {
+    const { run } = setup({ sdk: async () => { throw new Error("x"); }, config: cfg({ platform: "darwin" }), arch: "arm64" });
+    const { lines } = await run();
+    expect(line(lines, "native module")).toContain("--omit=optional");
+  });
+
   it("fails the native step with the hint and skips the rest", async () => {
-    const { fb, run } = setup({ sdk: async () => { throw new Error("no binding"); } });
+    const { fb, run } = setup({ sdk: async () => { throw new Error("no binding"); }, arch: "x64" });
     const { code, lines } = await run();
     expect(code).toBe(1);
     expect(line(lines, "native module")).toMatch(/^FAIL/);

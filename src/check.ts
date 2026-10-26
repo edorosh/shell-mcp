@@ -1,6 +1,6 @@
 import { type Backend, BackendError } from "./backend/types.js";
 import type { Config } from "./config.js";
-import type { RuntimeCheck } from "./runtime.js";
+import { nativeHint, type RuntimeCheck } from "./runtime.js";
 import { backendErrorText } from "./service.js";
 import { shQuote } from "./wrap.js";
 
@@ -11,6 +11,8 @@ export interface CheckDeps {
   readdir(p: string): Promise<string[]>;
   /** Overrides the sandbox step's hard deadline; tests only. */
   timeoutMs?: number;
+  /** Overrides the CPU architecture for the native step hint; tests only. */
+  arch?: NodeJS.Architecture;
 }
 
 const CHECK_TIMEOUT_MS = 30_000;
@@ -47,7 +49,7 @@ export async function runCheck(config: Config, deps: CheckDeps, write: (line: st
     await deps.loadSdk();
     ok("native module", "microsandbox loaded");
   } catch (e) {
-    fail("native module", `${msg(e)}; reinstall shell-mcp without --omit=optional, on the same OS and CPU`);
+    fail("native module", `${msg(e)}; ${nativeHint(config.platform, deps.arch ?? process.arch)}`);
     for (const s of ["runtime", "sandbox", "shell", "mount"]) skipped(s, "native module failed");
     return 1;
   }
