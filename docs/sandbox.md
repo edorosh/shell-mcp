@@ -8,7 +8,7 @@ project folder mounted, and give shell-mcp its name.
 shell-mcp talks to the sandbox through the `microsandbox` npm SDK, which drives
 the `msb` runtime. The SDK and `msb` must be the same version.
 `@edorosh/shell-mcp` 1.1.0 pins `microsandbox` at exactly **0.7.11**; the
-tested pair is SDK 0.7.11 with `msb` 0.7.11 on Windows (see
+tested pair is SDK 0.7.11 with `msb` 0.7.11 on Windows and macOS (Apple Silicon) (see
 [spike-results.md](superpowers/specs/spike-results.md)).
 [CHANGELOG.md](../CHANGELOG.md) lists the `msb` version each release expects.
 
@@ -70,8 +70,9 @@ microsandbox runtime as on Windows.
   ```
 
   `pwd -P` prints the resolved path, which is why the commands above use
-  `"$(cd ~/dev/myproj && pwd -P)"`. Give shell-mcp the same resolved path as
-  `--host-root` if it differs from the one you type.
+  `"$(cd ~/dev/myproj && pwd -P)"`. Only `msb create --mount-dir` needs the
+  resolved path. For `--host-root` either the symlinked or the resolved path
+  works; the resolved path is simplest because it matches the mount.
 - **Images need an arm64 variant.** The guest is aarch64, so an image such as
   `ubuntu:24.04` works only if it is published for arm64 (the common ones are).
 - **The guest sees the Mac's file system.** The default macOS volume is

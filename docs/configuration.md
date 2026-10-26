@@ -59,4 +59,6 @@ npm i -g @edorosh/shell-mcp@1.1.0
 Then use `shell-mcp` as the command, with the same arguments and without
 `npx -y @edorosh/shell-mcp@1.1.0`: in `.vscode/mcp.json`
 `"command": "shell-mcp"`, and in Claude Code's `.mcp.json`
-`"command": "cmd", "args": ["/c", "shell-mcp", "--sandbox", ...]`.
+`"command": "cmd", "args": ["/c", "shell-mcp", "--sandbox", ...]`. On macOS use
+`"command": "shell-mcp", "args": ["--sandbox", ...]` (untested on macOS: the
+spike did not exercise a global install there).

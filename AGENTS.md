@@ -32,7 +32,8 @@ Linux container.
   `src/check.ts` the `--check` steps; `src/runtime.ts` the `msb` version check.
 - `src/tools.ts`, `src/descriptions.ts`: MCP tools and their descriptions.
 - `src/service.ts`, `src/jobs.ts`, `src/wrap.ts`, `src/output.ts`, `src/paths.ts`:
-  command execution, background jobs, cwd tracking, output limits, path mapping.
+  command execution, background jobs, cwd tracking, output limits, path
+  mapping.
 - `src/backend/`: the backend interface and the microsandbox implementation. Keep
   SDK-specific code there.
 - `docs/superpowers/`: design specs, plans and spike results per milestone.
@@ -50,7 +51,8 @@ Linux container.
 - Docs: keep `README.md` minimal (what it is, quick start, contributing). Put
   setup detail, configuration, troubleshooting and known issues in the matching
   `docs/` page. When a feature ships, update `docs/product-spec.md`, the
-  `[Unreleased]` section of `CHANGELOG.md`, and `ROADMAP.md` if a milestone moves.
+  `[Unreleased]` section of `CHANGELOG.md`, and `ROADMAP.md` if a milestone
+  moves.
 - Flags change in three places: `src/config.ts`, `src/usage.ts` and the table in
   `docs/configuration.md`.
 - In docs and examples, use the `C:\Users\<you>\...` placeholder, never a real

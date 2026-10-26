@@ -16,10 +16,10 @@
   output was discarded before the first read of a job, that gap is not flagged.
 - The `microsandbox` SDK and the `msb` runtime must be the same version; the
   SDK is pinned to 0.7.11 for that reason.
-- The sandbox sees host-side changes to the mounted folder with a short delay. Right
-  after a host-side delete of the current directory the guest may still resolve it
-  (measured: still visible right after, gone after about 5 s), so the next call runs there
-  instead of resetting to the workspace root; later calls reset normally.
+- The sandbox sees host-side changes to the mounted folder with a short delay,
+  on Windows and on macOS. Right after a host-side delete of the current
+  directory the guest may still resolve it (measured: still visible right
+  after, gone after about 5 s), so the next call runs there instead of resetting to the workspace root; later calls reset normally.
 - Parallel calls run concurrently; the last to finish sets the working directory.
 - A command killed by a signal other than the timeout (for example `kill -9 $$`,
   or the out-of-memory killer) reports exit code -1, not 128+N: the sandbox
@@ -44,9 +44,10 @@
   [Sandbox and runtime](sandbox.md#macos)).
 - The microsandbox SDK spike (`spike/`) has been run on Windows (results in
   [spike-results.md](superpowers/specs/spike-results.md) and
-  [v2-spike-results.md](superpowers/specs/v2-spike-results.md)).
+  [v2-spike-results.md](superpowers/specs/v2-spike-results.md)) and on macOS
+  (2026-10-26: [v2.1-macos-spike-results.md](superpowers/specs/v2.1-macos-spike-results.md)).
 - The integration suite (`test/integration.test.ts`) passes all 12 acceptance
-  criteria against a real sandbox on Windows (with `SHELL_MCP_IT_ALLOW_STOP=1`).
+  criteria against a real sandbox on Windows and macOS (with `SHELL_MCP_IT_ALLOW_STOP=1`).
 - Not yet verified on a real host: the `output_gap` and `launch_unconfirmed`
   error paths.
 

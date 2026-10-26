@@ -1,7 +1,7 @@
 # shell-mcp — Product Specification
 
-Status: current through release 1.1.0 (v1 and v2) · Date: 2026-10-25 ·
-v2 amendments 2026-10-25 · updated 2026-10-26
+Status: current through release 1.1.0 (v1, v2 and v2.1) · Date: 2026-10-25 ·
+v2 amendments 2026-10-25 · v2.1 (macOS) 2026-10-26 · updated 2026-10-26
 
 ## 1. Conventions
 
@@ -58,7 +58,7 @@ Motivations:
 - G3. The host/sandbox path difference is handled so the agent can move
   between file tools (host paths) and shell commands (sandbox paths) without
   confusion.
-- G4. Works with Claude Code and GitHub Copilot on Windows hosts.
+- G4. Works with Claude Code and GitHub Copilot on Windows and macOS (Apple Silicon) hosts.
 - G5. The server runs on the host, never inside the sandbox, so that it
   survives sandbox pause, stop, or compromise and can always report the
   sandbox's state to the agent.
@@ -419,7 +419,7 @@ Added 2026-10-25, v2.
 
 ## 13. Acceptance criteria
 
-A conforming implementation passes all of these on a Windows host (1 to 12
+A conforming implementation passes all of these on a Windows or Apple Silicon macOS host (1 to 12
 from v1, 13 to 17 from v2 and later):
 
 1. `shell` with `echo hi` returns `hi` and exit code 0.
