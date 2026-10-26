@@ -54,8 +54,10 @@ building the repo.
 
 ## v2.1: macOS hosts
 
-Status: done (2026-10-26). Released as npm 1.1.0; `--check` with the
-published package and Claude Code pass on an Apple Silicon Mac.
+Status: done (2026-10-26). Released as npm 1.1.0. On an Apple Silicon Mac,
+`--check` and Claude Code pass with the published 1.1.0; the acceptance suite
+(12 of 12) and Copilot with the hook passed with 1.0.2 in the spike and were
+not rerun, since 1.1.0 changes only the unsupported-Mac message, CI and docs.
 Takes on the macOS half of N6.
 Design: [v2.1 macOS design](docs/superpowers/specs/2026-10-26-shell-mcp-v2.1-macos-design.md).
 Spike: [v2.1 macOS spike results](docs/superpowers/specs/v2.1-macos-spike-results.md).
