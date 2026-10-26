@@ -74,9 +74,30 @@ Probe: a TCP connect only (`exec 3<>/dev/tcp/host/port`).
 `Sandbox.get` plus `connectWithTimeout` on a running sandbox takes about 15 ms (get 11 to 12 ms,
 connect 3 to 4 ms).
 
-## Mac
+## Mac (2026-10-26)
 
-Not run yet.
+Host: Mac mini, Apple Silicon (arm64), Node 25.9.0, SDK 0.7.11, image `ubuntu:24.04` (arm64 digest),
+mount `/Volumes/ext-ssd-256/dev/tmp-proj` at `/workspace` (the resolved `pwd -P` path).
+
+Results match Windows on every point:
+
+- **Lifetime:** the sandbox survives the process exit and stays `running`, with `ownsLifecycle: false`.
+- **Config:** the stored `config()` has the same shape and owned values as `.build()`. The host
+  path is stored exactly as passed, and the policy is held in wire form. `.policyJson()` rejects
+  the typed shape.
+- **Network:** the results are the same as on Windows. Under the deny policy:
+  - example.com connects;
+  - www.iana.org is refused;
+  - 192.168.1.1:80 connects, in 1 to 2 ms.
+
+  With no policy set, all three connect. The 192.168.1.1 question stays open; it was run with
+  the old connect-only probe.
+- **Stop, start, remove:**
+  - `stop` takes about 55 ms, then the status is `stopped`;
+  - `startDetached` takes about 0.14 s, and the policy survives the restart;
+  - `remove` takes about 4 ms, and a `get` afterwards throws `sandboxNotFound`.
+- **Reuse cost:** `get` plus `connect` takes about 5 ms. A create with the image already cached
+  takes about 0.2 s.
 
 ## Integration suite (`test/integration.create.test.ts`)
 
