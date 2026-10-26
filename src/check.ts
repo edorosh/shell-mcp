@@ -42,7 +42,7 @@ export async function runCheck(config: Config, deps: CheckDeps, write: (line: st
   };
   const skipped = (step: string, why: string) => write(`skipped ${step}: ${why}`);
 
-  ok("config", `sandbox "${config.sandbox}", host root ${config.hostRoot}, guest root ${config.guestRoot}`);
+  ok("config", `sandbox "${config.sandbox}", mounts ${config.mounts.map((m) => `${m.host} -> ${m.guest}`).join(", ")}`);
 
   // 2. native module
   try {
@@ -113,31 +113,33 @@ export async function runCheck(config: Config, deps: CheckDeps, write: (line: st
 
   // 6. mount
   const fold = config.platform === "win32" ? (s: string) => s.toLowerCase() : (s: string) => s;
-  try {
-    const ls = await deps.backend.run(`ls -A1 -- ${shQuote(config.guestRoot)}`, { timeoutMs: CHECK_TIMEOUT_MS });
-    if (ls.timedOut || ls.exitCode !== 0) {
-      fail("mount", `listing ${config.guestRoot} in the sandbox failed (${ls.timedOut ? "timed out" : `exit code ${ls.exitCode ?? "unknown"}`}); is the host root mounted at the guest root?`);
-    } else {
-      const guest = ls.output.split("\n").map((l) => l.replace(/\r$/, "")).filter((l) => l !== "");
-      const host = await deps.readdir(config.hostRoot);
-      if (host.length === 0) {
-        ok("mount", `host root is empty, so the mount cannot be verified; add a file and rerun for a real check`);
+  for (const m of config.mounts) {
+    try {
+      const ls = await deps.backend.run(`ls -A1 -- ${shQuote(m.guest)}`, { timeoutMs: CHECK_TIMEOUT_MS });
+      if (ls.timedOut || ls.exitCode !== 0) {
+        fail("mount", `listing ${m.guest} in the sandbox failed (${ls.timedOut ? "timed out" : `exit code ${ls.exitCode ?? "unknown"}`}); is the host root mounted at the guest root?`);
       } else {
-        const missingInGuest = diff(host, guest, fold);
-        const missingOnHost = diff(guest, host, fold);
-        if (missingInGuest.length === 0 && missingOnHost.length === 0) {
-          ok("mount", `${config.hostRoot} matches ${config.guestRoot} (${host.length} entries)`);
+        const guest = ls.output.split("\n").map((l) => l.replace(/\r$/, "")).filter((l) => l !== "");
+        const host = await deps.readdir(m.host);
+        if (host.length === 0) {
+          ok("mount", `host root is empty, so the mount cannot be verified; add a file and rerun for a real check`);
         } else {
-          const parts: string[] = [];
-          if (missingInGuest.length) parts.push(`missing in sandbox: ${names(missingInGuest)}`);
-          if (missingOnHost.length) parts.push(`missing on host: ${names(missingOnHost)}`);
-          fail("mount", `${parts.join("; ")}; check the mount of ${config.hostRoot} at ${config.guestRoot} (a file created between the two reads can cause this, so rerun)`);
+          const missingInGuest = diff(host, guest, fold);
+          const missingOnHost = diff(guest, host, fold);
+          if (missingInGuest.length === 0 && missingOnHost.length === 0) {
+            ok("mount", `${m.host} matches ${m.guest} (${host.length} entries)`);
+          } else {
+            const parts: string[] = [];
+            if (missingInGuest.length) parts.push(`missing in sandbox: ${names(missingInGuest)}`);
+            if (missingOnHost.length) parts.push(`missing on host: ${names(missingOnHost)}`);
+            fail("mount", `${parts.join("; ")}; check the mount of ${m.host} at ${m.guest} (a file created between the two reads can cause this, so rerun)`);
+          }
         }
       }
+    } catch (e) {
+      const err = e instanceof BackendError ? e : undefined;
+      fail("mount", err ? backendErrorText(err, config.sandbox) : msg(e));
     }
-  } catch (e) {
-    const err = e instanceof BackendError ? e : undefined;
-    fail("mount", err ? backendErrorText(err, config.sandbox) : msg(e));
   }
   return failed ? 1 : 0;
 }

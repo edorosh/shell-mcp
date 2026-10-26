@@ -1,6 +1,6 @@
 import path from "node:path";
 
-export interface Mount {
+export interface PathMount {
   host: string;
   guest: string;
 }
@@ -8,10 +8,10 @@ export interface Mount {
 export class PathMapper {
   private readonly hostPath: typeof path.win32;
   /** Normalized mounts, longest guest root first. */
-  private readonly mounts: Mount[];
+  private readonly mounts: PathMount[];
   private readonly re: RegExp;
 
-  constructor(mounts: Mount[], platform: NodeJS.Platform) {
+  constructor(mounts: PathMount[], platform: NodeJS.Platform) {
     this.hostPath = platform === "win32" ? path.win32 : path.posix;
     this.mounts = mounts
       .map((m) => {

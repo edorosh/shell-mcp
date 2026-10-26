@@ -7,7 +7,7 @@ import { backendErrorText } from "../src/service.js";
 import { FakeBackend } from "./fakeBackend.js";
 
 const cfg = (over: Partial<Config> = {}): Config => ({
-  sandbox: "dev", hostRoot: "/home/me/proj", guestRoot: "/workspace", defaultTimeoutMs: 120000,
+  sandbox: "dev", mounts: [{ host: "/home/me/proj", hostResolved: "/home/me/proj", guest: "/workspace", readonly: false }], recreate: false, defaultTimeoutMs: 120000,
   maxTimeoutMs: 600000, maxOutput: 30000, rewriteOutputPaths: true, shell: "bash", platform: "linux", ...over,
 });
 const out = (output: string) => ({ output, exitCode: 0, timedOut: false, droppedChars: 0 });

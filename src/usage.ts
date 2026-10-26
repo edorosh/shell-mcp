@@ -6,10 +6,26 @@ Run shell commands inside a microsandbox, served over MCP on stdio.
 
 Options (a flag wins over its environment variable):
   --sandbox <name>            Sandbox to run in. Env: SHELL_MCP_SANDBOX. Required.
-  --host-root <path>          Absolute host directory mapped into the sandbox.
-                              Env: SHELL_MCP_HOST_ROOT. Required.
-  --guest-root <path>         Absolute POSIX path of that directory inside the sandbox.
-                              Env: SHELL_MCP_GUEST_ROOT. Required.
+  --host-root <path>          Attach mode: absolute host directory mapped into the sandbox.
+                              Env: SHELL_MCP_HOST_ROOT. Required without --image.
+  --guest-root <path>         Attach mode: absolute POSIX path of that directory inside
+                              the sandbox. Env: SHELL_MCP_GUEST_ROOT. Required without --image.
+
+Create mode (with --image; --host-root and --guest-root are then an error):
+  --image <ref>               OCI image; switches on create mode. Env: SHELL_MCP_IMAGE.
+  --mount <host:guest[:ro]>   Bind mount, repeatable, at least one; the first is the project
+                              mount. Env: SHELL_MCP_MOUNT (separated by ;).
+  --allow-domain <host>       Allow one host, or a suffix such as *.example.com. Repeatable.
+                              Env: SHELL_MCP_ALLOW_DOMAIN (separated by ,).
+  --allow-network             Allow all public hosts. Env: SHELL_MCP_ALLOW_NETWORK=1 (or true, yes).
+  --cpus <n>                  Number of vCPUs. Env: SHELL_MCP_CPUS. Default: SDK default.
+  --memory <size>             Memory in MiB (2048) or with a g suffix (2g).
+                              Env: SHELL_MCP_MEMORY. Default: SDK default.
+  --recreate                  When the sandbox differs from these flags, remove and recreate it.
+                              No env var.
+  --prepare                   Provision the sandbox in the foreground, print progress and exit.
+
+Other options:
   --default-timeout <time>    Timeout when a call gives none (e.g. 120s, 5m, 1500ms).
                               Env: SHELL_MCP_DEFAULT_TIMEOUT. Default: 120s.
   --max-timeout <time>        Upper limit for any call's timeout.

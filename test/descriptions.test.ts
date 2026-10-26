@@ -23,3 +23,19 @@ describe("describeTools", () => {
     expect(t.shell_list).toBeTruthy();
   });
 });
+
+describe("describeTools with several mounts", () => {
+  const multi = parseConfig(
+    ["--sandbox", "sb", "--image", "i", "--mount", "/h/p:/workspace:ro", "--mount", "/h/q:/data"],
+    {},
+    { platform: "linux", exists: () => true, realpath: (p) => p },
+  );
+  const d = describeTools(multi).shell;
+  it("marks a read-only project mount and lists the other mounts", () => {
+    expect(d).toContain("/h/p is mounted in the sandbox at /workspace (read-only)");
+    expect(d).toContain("Also mounted: /h/q at /data.");
+  });
+  it("adds nothing for a single mount", () => {
+    expect(describeTools(cfg).shell).not.toContain("Also mounted");
+  });
+});

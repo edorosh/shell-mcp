@@ -50,6 +50,10 @@ async function main(): Promise<void> {
     process.stdout.write(`shell-mcp ${v.self} (microsandbox SDK ${v.sdk})\n`);
     return;
   }
+  if (cli.mode === "prepare") {
+    log("--prepare is not implemented yet");
+    process.exit(1);
+  }
   if (cli.mode === "check") {
     const cfg = cli.config;
     // Importing the backend module does not load the native module; the check's native step does.
