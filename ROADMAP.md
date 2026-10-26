@@ -81,30 +81,48 @@ the acceptance suite passes 12 of 12, and Claude Code and Copilot run
 
 ## v3: Sandbox created from the MCP config
 
-Status: idea.
+Status: designed (2026-10-26), spike next.
+Design: [v3 create-sandbox design](docs/superpowers/specs/2026-10-26-shell-mcp-v3-create-sandbox-design.md).
 
 Goal: shell-mcp creates and starts its microsandbox machine when the MCP server
 starts, so the user no longer prepares a sandbox by hand. This takes on
-sandbox lifecycle management (N1).
+sandbox lifecycle management (N1) in a new create mode.
 
-- Define the machine in the MCP server config: image, mounts (host folder to
-  sandbox path), network rules, and resources such as CPU and memory.
-- On startup, create the sandbox from that definition, or reuse one that
-  already matches it; stop it when the server exits.
-- Path translation (G3) follows the configured mounts instead of a separate
-  mapping.
-- Keep today's attach mode (`--sandbox` names an existing sandbox) next to the
-  new create mode, so v2 configs keep working.
-- Network access is denied unless the config allows it.
-- Open questions: flags or a config file for the machine definition, start-up
-  time on the first tool call, what happens to a running machine when the
-  config changes, and whether data in the sandbox survives a restart.
-- Notes on the SDK's creation API: `v3-spec/sdk-create-notes.md` in the project
-  files.
+- `--image` switches on create mode; `--sandbox` stays the sandbox name. Without
+  `--image` the server attaches to an existing sandbox as in v2, so v2 configs
+  keep working.
+- The machine is defined by flags: `--image`, repeatable `--mount HOST:GUEST[:ro]`
+  (the first is the project mount; host symlinks are resolved for `msb`),
+  `--allow-domain` / `--allow-network`, `--cpus`, `--memory`.
+- The sandbox is persistent: created on first start, reused by name later, and
+  never stopped when the server exits.
+- If the sandbox no longer matches the flags, shell-mcp refuses and lists the
+  differences; `--recreate` removes and recreates it.
+- Network access is denied unless allowed; private addresses always stay blocked.
+- The server answers the MCP handshake at once and provisions in the
+  background; an early tool call says the sandbox is still being prepared.
+  `--prepare` provisions in the terminal and exits. `--check` stays read-only.
+- Path translation (G3) follows the configured mounts.
+- Ships as npm 1.2.0.
 
-Done when: a user with only `msb` installed adds one MCP config entry, and the
+Done when: a user with no hand-made sandbox adds one MCP config entry, and the
 first `shell` call runs in a sandbox shell-mcp created, with the project folder
-mounted.
+mounted, on Windows and on an Apple Silicon Mac, in Claude Code and Copilot.
+
+## v3.1: Sandbox definition in a config file
+
+Status: idea.
+
+Goal: a project describes its sandbox in a file checked into the repo, so a team
+shares one definition and richer settings fit without long flag lists.
+
+- A project `shell-mcp.json` passed with `--config`, holding what v3's flags
+  hold (image, mounts, network rules, resources) plus room for more structure,
+  such as environment variables and finer network rules.
+- v3 flags keep working.
+
+Done when: one MCP entry with `--config` gives the same sandbox as the
+equivalent v3 flags.
 
 ## v4: Linux hosts
 
