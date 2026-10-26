@@ -13,7 +13,7 @@ const cfg = (over: Partial<Config> = {}): Config => ({
 const out = (output: string) => ({ output, exitCode: 0, timedOut: false, droppedChars: 0 });
 const okRuntime: RuntimeCheck = { ok: true, origin: "packaged", msbPath: "/x/msb", version: "0.7.11" };
 
-function setup(o: { fb?: FakeBackend; sdk?: () => Promise<unknown>; runtime?: RuntimeCheck; host?: string[]; config?: Config; arch?: NodeJS.Architecture } = {}) {
+function setup(o: { fb?: FakeBackend; sdk?: () => Promise<unknown>; runtime?: RuntimeCheck; host?: string[]; config?: Config; arch?: NodeJS.Architecture; inspect?: CheckDeps["inspect"] } = {}) {
   const fb = o.fb ?? new FakeBackend();
   const lines: string[] = [];
   const deps: CheckDeps = {
@@ -22,6 +22,7 @@ function setup(o: { fb?: FakeBackend; sdk?: () => Promise<unknown>; runtime?: Ru
     runtime: async () => o.runtime ?? okRuntime,
     readdir: async () => o.host ?? ["a", "b"],
     arch: o.arch,
+    inspect: o.inspect,
   };
   const run = async () => {
     const code = await runCheck(o.config ?? cfg(), deps, (l) => lines.push(l));
@@ -224,5 +225,52 @@ describe("runCheck connect guard", () => {
     expect(failed).toContain("/data");
     expect(failed).toContain("/home/me/data");
     expect(lines[0]).toContain("/home/me/proj -> /workspace, /home/me/data -> /data");
+  });
+});
+
+describe("runCheck in create mode", () => {
+  const machine = { image: "ubuntu:24.04", allowDomains: [], allowNetwork: false };
+  const create = () => cfg({ machine });
+
+  it("fails with 'not created yet' when the sandbox is absent and skips the rest", async () => {
+    const { fb, run } = setup({ config: create(), inspect: async () => ({ state: "absent" }) });
+    const { code, lines } = await run();
+    expect(code).toBe(1);
+    expect(lines).toContain('FAIL    sandbox: "dev" is not created yet; run with --prepare');
+    expect(lines).toContain("skipped shell: sandbox failed");
+    expect(lines).toContain("skipped mount: sandbox failed");
+    expect(fb.runs).toEqual([]);
+  });
+
+  it("fails on a mismatch without touching the backend", async () => {
+    const { fb, run } = setup({ config: create(), inspect: async () => ({ state: "mismatch", diffs: ["image a -> b", "mount /c added"] }) });
+    const { code, lines } = await run();
+    expect(code).toBe(1);
+    expect(lines).toContain("FAIL    definition: image a -> b; mount /c added");
+    expect(fb.runs).toEqual([]);
+  });
+
+  it("reports the definition then runs today's steps", async () => {
+    const { fb, run } = setup({ config: create(), inspect: async () => ({ state: "ok", status: "running" }) });
+    fb.queueRun(out("Linux\n")).queueRun(out("a\nb\n"));
+    const { code, lines } = await run();
+    expect(code).toBe(0);
+    expect(lines).toContain("ok      definition: matches the flags");
+    expect(lines.findIndex((l) => l.includes(" runtime:"))).toBeLessThan(lines.findIndex((l) => l.includes(" definition:")));
+    expect(lines.findIndex((l) => l.includes(" definition:"))).toBeLessThan(lines.findIndex((l) => l.includes(" sandbox:")));
+  });
+
+  it("has no definition step in attach mode", async () => {
+    const { fb, run } = setup();
+    fb.queueRun(out("Linux\n")).queueRun(out("a\nb\n"));
+    const { lines } = await run();
+    expect(lines.some((l) => l.includes("definition"))).toBe(false);
+  });
+
+  it("hints at the image when the shell does not run", async () => {
+    const { fb, run } = setup({ config: create(), inspect: async () => ({ state: "ok", status: "running" }) });
+    fb.queueRun(out("nope\n"));
+    const { lines } = await run();
+    expect(line(lines, "shell")).toContain("the image must contain bash, or your --shell");
   });
 });

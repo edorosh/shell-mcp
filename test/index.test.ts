@@ -103,4 +103,33 @@ describe("entry point", () => {
     expect(r.stdout).toContain("SHELL_MCP_SANDBOX");
     expect(r.stderr).toBe("");
   });
+
+  it("serving in attach mode logs the mode", async () => {
+    const r = await runNode(["--sandbox", "no-such-sandbox-shell-mcp-test", "--host-root", tmpdir(), "--guest-root", "/workspace"]);
+    expect(r.stderr).toContain('attach mode, sandbox "no-such-sandbox-shell-mcp-test"');
+  });
+
+  it("serving in create mode logs the mode and image, with MCP only on stdout", async () => {
+    const msgs = [
+      { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "t", version: "0" } } },
+      { jsonrpc: "2.0", method: "notifications/initialized" },
+      { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} },
+    ];
+    const r = await runNode(
+      ["--sandbox", "s", "--image", "ubuntu:24.04", "--mount", `${tmpdir()}:/workspace`],
+      msgs.map((m) => JSON.stringify(m)).join("\n") + "\n",
+      (out) => out.includes('"id":2'),
+    );
+    expect(r.stderr).toContain('create mode, sandbox "s", image ubuntu:24.04');
+    for (const l of r.stdout.trim().split("\n")) expect(() => JSON.parse(l)).not.toThrow();
+  });
+
+  it("--prepare and --check never write MCP to stdout", async () => {
+    const args = ["--sandbox", "no-such-sandbox-shell-mcp-test", "--image", "ubuntu:24.04", "--mount", `${tmpdir()}:/workspace`];
+    for (const mode of ["--prepare", "--check"]) {
+      const r = await runNode([mode, ...args]);
+      expect(r.stdout).not.toContain("jsonrpc");
+      expect(r.code).not.toBeNull();
+    }
+  }, 30_000);
 });

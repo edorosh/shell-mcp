@@ -1,5 +1,6 @@
 import { type Backend, BackendError } from "./backend/types.js";
 import type { Config } from "./config.js";
+import type { Inspect } from "./backend/provision.js";
 import { nativeHint, type RuntimeCheck } from "./runtime.js";
 import { backendErrorText } from "./service.js";
 import { shQuote } from "./wrap.js";
@@ -9,6 +10,8 @@ export interface CheckDeps {
   backend: Backend;
   runtime(): Promise<RuntimeCheck>;
   readdir(p: string): Promise<string[]>;
+  /** Create mode: read-only look at the sandbox against the flags (`Provisioner.inspect`). */
+  inspect?: () => Promise<Inspect>;
   /** Overrides the sandbox step's hard deadline; tests only. */
   timeoutMs?: number;
   /** Overrides the CPU architecture for the native step hint; tests only. */
@@ -35,6 +38,8 @@ const names = (xs: string[]) => {
  */
 export async function runCheck(config: Config, deps: CheckDeps, write: (line: string) => void): Promise<0 | 1> {
   let failed = false;
+  const create = config.machine !== undefined;
+  const shellHint = create ? `the image must contain ${config.shell}, or your --shell` : `is ${config.shell} installed in the image? or set --shell`;
   const ok = (step: string, detail: string) => write(`ok      ${step}: ${detail}`);
   const fail = (step: string, detail: string) => {
     failed = true;
@@ -50,7 +55,7 @@ export async function runCheck(config: Config, deps: CheckDeps, write: (line: st
     ok("native module", "microsandbox loaded");
   } catch (e) {
     fail("native module", `${msg(e)}; ${nativeHint(config.platform, deps.arch ?? process.arch)}`);
-    for (const s of ["runtime", "sandbox", "shell", "mount"]) skipped(s, "native module failed");
+    for (const s of [...(create ? ["runtime", "definition"] : ["runtime"]), "sandbox", "shell", "mount"]) skipped(s, "native module failed");
     return 1;
   }
 
@@ -61,6 +66,28 @@ export async function runCheck(config: Config, deps: CheckDeps, write: (line: st
     else fail("runtime", r.message);
   } catch (e) {
     fail("runtime", msg(e));
+  }
+
+  // 3b. create mode: the sandbox exists and matches the flags (read-only)
+  if (create && deps.inspect) {
+    try {
+      const r = await deps.inspect();
+      if (r.state === "absent") {
+        fail("sandbox", `"${config.sandbox}" is not created yet; run with --prepare`);
+        for (const s of ["shell", "mount"]) skipped(s, "sandbox failed");
+        return 1;
+      }
+      if (r.state === "mismatch") {
+        fail("definition", r.diffs.join("; "));
+        for (const s of ["sandbox", "shell", "mount"]) skipped(s, "definition failed");
+        return 1;
+      }
+      ok("definition", "matches the flags");
+    } catch (e) {
+      fail("definition", msg(e));
+      for (const s of ["sandbox", "shell", "mount"]) skipped(s, "definition failed");
+      return 1;
+    }
   }
 
   // 4 and 5: one `uname -s` run
@@ -86,12 +113,12 @@ export async function runCheck(config: Config, deps: CheckDeps, write: (line: st
     }
     if (e instanceof BackendError && e.kind === "not_started") {
       ok("sandbox", `"${config.sandbox}" is running`);
-      fail("shell", `${e.message}; is ${config.shell} installed in the image? or set --shell`);
+      fail("shell", `${e.message}; ${shellHint}`);
       skipped("mount", "shell failed");
       return 1;
     }
     const err = e instanceof BackendError ? e : new BackendError("outcome_unknown", msg(e));
-    fail("sandbox", backendErrorText(err, config.sandbox));
+    fail("sandbox", backendErrorText(err, config.sandbox, create));
     skipped("shell", "sandbox failed");
     skipped("mount", "sandbox failed");
     return 1;
@@ -105,7 +132,7 @@ export async function runCheck(config: Config, deps: CheckDeps, write: (line: st
   ok("sandbox", `"${config.sandbox}" is running`);
   const kernel = uname.output.trim();
   if (uname.exitCode !== 0 || kernel !== "Linux") {
-    fail("shell", `uname -s gave ${JSON.stringify(kernel)} with exit code ${uname.exitCode ?? "unknown"}, expected Linux with exit 0; is ${config.shell} installed in the image? or set --shell`);
+    fail("shell", `uname -s gave ${JSON.stringify(kernel)} with exit code ${uname.exitCode ?? "unknown"}, expected Linux with exit 0; ${shellHint}`);
     skipped("mount", "shell failed");
     return 1;
   }
