@@ -112,4 +112,4 @@ Results match Windows on every point:
 ## Integration suite (`test/integration.create.test.ts`)
 
 - Windows: 6/6 pass, in 3.8 s.
-- Mac: not run yet.
+- Mac: 6/6 pass, in 1.6 s.
