@@ -75,7 +75,7 @@ async function main(): Promise<void> {
   const { MicrosandboxBackend } = await import("./backend/microsandbox.js");
   const backend = new MicrosandboxBackend(cfg.sandbox, cfg.shell, cfg.maxOutput);
   const service = new ShellService(cfg, backend);
-  const server = createServer(cfg, service);
+  const server = createServer(cfg, service, v.self);
   await server.connect(new StdioServerTransport());
   // Advisory only and not awaited: a slow or failing check must never delay or stop serving.
   void checkRuntime(v.sdk).then(
