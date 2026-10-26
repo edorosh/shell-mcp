@@ -1,4 +1,4 @@
-/** Help text for --help; keep in step with the README configuration table. */
+/** Help text for --help; keep in step with the table in docs/configuration.md. */
 export function usage(): string {
   return `Usage: shell-mcp [options]
 
