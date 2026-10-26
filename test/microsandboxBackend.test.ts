@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { backendErrorText } from "../src/service.js";
 import { BackendError } from "../src/backend/types.js";
 import {
   MicrosandboxBackend,
@@ -7,6 +8,7 @@ import {
   type SdkJobInfo,
   type SdkLogEntry,
   type SdkModule,
+  type SandboxProvisioner,
   type SdkSandbox,
 } from "../src/backend/microsandbox.js";
 
@@ -669,5 +671,88 @@ describe("MicrosandboxBackend jobs", () => {
     const { id } = await be.startJob("x");
     sb.jobs.get(id)!.logPages = [new SdkErr("sandbox_error")];
     expect(await kindOf(be.readJob(id))).toBe("unreachable");
+  });
+});
+
+describe("MicrosandboxBackend in create mode", () => {
+  function createSetup(prepareWaitMs = 50) {
+    const base = setup();
+    let ensures = 0;
+    const prov: { impl: () => Promise<SdkSandbox>; progress: () => string } & SandboxProvisioner = {
+      impl: async () => base.sb,
+      progress: () => "pulling ubuntu:24.04, 60%",
+      ensure() { ensures++; return this.impl(); },
+    };
+    const be = new MicrosandboxBackend("s", "bash", 1000, {
+      loadSdk: async () => { base.calls.load++; return {
+        Sandbox: { get: async (n: string) => { base.calls.get++; return { status: base.ctl.status, connectWithTimeout: async () => base.sb }; } },
+      } as SdkModule; },
+      provisioner: prov,
+      prepareWaitMs,
+    });
+    return { be, sb: base.sb, calls: base.calls, ctl: base.ctl, prov, ensures: () => ensures };
+  }
+
+  it("opens through ensure() and never calls Sandbox.get", async () => {
+    const { be, calls, ensures } = createSetup();
+    await be.run("true", { timeoutMs: 1000 });
+    await be.run("true", { timeoutMs: 1000 });
+    expect(ensures()).toBe(1);
+    expect(calls.get).toBe(0);
+  });
+
+  it("run reports preparing after its own timeout while ensure() is pending, and a later call reuses it", async () => {
+    const { be, sb, prov, ensures } = createSetup();
+    let release!: (s: SdkSandbox) => void;
+    prov.impl = () => new Promise<SdkSandbox>((r) => { release = r; });
+    const err = await be.run("x", { timeoutMs: 50 }).catch((e) => e);
+    expect(err).toBeInstanceOf(BackendError);
+    expect(err.kind).toBe("preparing");
+    expect(err.message).toBe('sandbox "s" is still being prepared (pulling ubuntu:24.04, 60%); retry shortly');
+    release(sb);
+    await be.run("true", { timeoutMs: 1000 });
+    expect(ensures()).toBe(1);
+  });
+
+  it("startJob reports preparing after prepareWaitMs", async () => {
+    const { be, prov } = createSetup(30);
+    prov.impl = () => new Promise<SdkSandbox>(() => {});
+    await expect(be.startJob("x")).rejects.toMatchObject({ kind: "preparing" });
+    await expect(be.readJob("j")).rejects.toMatchObject({ kind: "preparing" });
+  });
+
+  it("a rejected ensure() is retried by the next call; BackendErrors pass through unchanged", async () => {
+    const { be, prov, sb, ensures } = createSetup();
+    prov.impl = async () => { throw new BackendError("config_mismatch", "image differs"); };
+    await expect(be.run("x", { timeoutMs: 1000 })).rejects.toMatchObject({ kind: "config_mismatch", message: "image differs" });
+    prov.impl = async () => sb;
+    await expect(be.run("true", { timeoutMs: 1000 })).resolves.toMatchObject({ exitCode: 0 });
+    expect(ensures()).toBe(2);
+  });
+
+  it("a cached connection that fails and probes as stopped leads the next call to ensure() again", async () => {
+    const { be, sb, ctl, ensures } = createSetup();
+    await be.run("true", { timeoutMs: 1000 });
+    ctl.status = "stopped";
+    sb.execError = new SdkErr("io", "broken pipe");
+    await expect(be.run("x", { timeoutMs: 1000 })).rejects.toMatchObject({ kind: "not_running" });
+    sb.execError = undefined;
+    ctl.status = "running"; // ensure() restarts it
+    await expect(be.run("true", { timeoutMs: 1000 })).resolves.toMatchObject({ exitCode: 0 });
+    expect(ensures()).toBe(2);
+  });
+
+  it("warm() starts ensure() and swallows its rejection", async () => {
+    const { be, prov, ensures } = createSetup();
+    prov.impl = async () => { throw new Error("boom"); };
+    be.warm();
+    await new Promise((r) => setTimeout(r, 10));
+    expect(ensures()).toBe(1);
+  });
+
+  it("backendErrorText leaves preparing and config_mismatch unchanged", () => {
+    for (const kind of ["preparing", "config_mismatch"] as const) {
+      expect(backendErrorText(new BackendError(kind, "msg here"), "s")).toBe("msg here");
+    }
   });
 });

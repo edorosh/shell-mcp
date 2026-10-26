@@ -31,7 +31,9 @@ export type BackendErrorKind =
   | "not_running"
   | "unreachable"
   | "not_started"
-  | "outcome_unknown";
+  | "outcome_unknown"
+  | "preparing"
+  | "config_mismatch";
 
 export class BackendError extends Error {
   readonly kind: BackendErrorKind;

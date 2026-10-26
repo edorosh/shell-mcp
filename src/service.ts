@@ -8,7 +8,9 @@ import { extractCwd, newNonce, wrapBackground, wrapForeground } from "./wrap.js"
 export interface ToolResult { text: string; isError: boolean }
 export interface CallContext { signal?: AbortSignal; onProgress?: (elapsedSec: number) => void }
 
-const isSandboxState = (k: BackendError["kind"]) => k === "not_found" || k === "not_running" || k === "unreachable";
+// preparing and config_mismatch mean the command was not started; their text is the message itself.
+const isSandboxState = (k: BackendError["kind"]) =>
+  k === "not_found" || k === "not_running" || k === "unreachable" || k === "preparing" || k === "config_mismatch";
 
 /** Wording for a backend failure, shared by the tools and `--check`. Other kinds keep their own message. */
 export function backendErrorText(err: BackendError, sandbox: string): string {

@@ -105,6 +105,16 @@ describe("ShellService.shell foreground", () => {
     expect(r.text).toContain("cwd: C:\\Users\\e\\proj\n");
   });
 
+  it("reports preparing and config_mismatch as not started, with the message unchanged", async () => {
+    const { fb, svc } = setup();
+    for (const kind of ["preparing", "config_mismatch"] as const) {
+      fb.queueRun(new BackendError(kind, `detail for ${kind}`));
+      const r = await svc.shell({ command: "x" });
+      expect(r.isError).toBe(true);
+      expect(r.text).toBe(`Command was not started: detail for ${kind}`);
+    }
+  });
+
   it("maps backend errors", async () => {
     const { fb, svc } = setup();
     fb.queueRun(new BackendError("not_running", "stopped"));

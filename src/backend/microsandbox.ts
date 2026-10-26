@@ -61,7 +61,18 @@ export interface SdkModule {
   Sandbox: { get(name: string): Promise<{ status: string; connectWithTimeout(ms: number): Promise<SdkSandbox> }> };
 }
 
+/** Create mode: opens (creating, starting or reusing) the sandbox. Attempts are serialized by the provisioner. */
+export interface SandboxProvisioner {
+  ensure(): Promise<SdkSandbox>;
+  /** Human-readable state of the attempt in flight, e.g. "pulling ubuntu:24.04, 60%". */
+  progress(): string;
+}
+
 export interface MicrosandboxDeps {
+  /** Create mode. Without it the backend attaches to an existing sandbox. */
+  provisioner?: SandboxProvisioner;
+  /** Create mode: how long a call other than run waits for a first connection before reporting `preparing`. */
+  prepareWaitMs?: number;
   loadSdk?: () => Promise<SdkModule>;
   now?: () => number;
   /** After our own kill (deadline or abort), how long to wait for "exited" before giving up. */
@@ -145,6 +156,10 @@ export class MicrosandboxBackend implements Backend {
   private readonly now: () => number;
   private readonly graceMs: number;
   private readonly killDelayMs: number;
+  private readonly provisioner?: SandboxProvisioner;
+  private readonly prepareWaitMs: number;
+  /** True once the current `conn` promise has resolved. */
+  private connReady = false;
 
   constructor(
     private readonly sandboxName: string,
@@ -157,13 +172,20 @@ export class MicrosandboxBackend implements Backend {
     this.now = deps.now ?? Date.now;
     this.graceMs = deps.graceMs ?? 2_500;
     this.killDelayMs = deps.killDelayMs ?? 500;
+    this.provisioner = deps.provisioner;
+    this.prepareWaitMs = deps.prepareWaitMs ?? 30_000;
+  }
+
+  /** Start connecting (create mode: preparing the sandbox) in the background; failures surface on the first call. */
+  warm(): void {
+    this.connect().catch(() => {});
   }
 
   async run(script: string, opts: { timeoutMs: number; signal?: AbortSignal }): Promise<RunResult> {
     const { timeoutMs, signal } = opts;
     const cancelled = () => new BackendError("not_started", "cancelled before start");
     if (signal?.aborted) throw cancelled();
-    const { sb, cached } = await this.connectTracked();
+    const { sb, cached } = await this.connectTracked(timeoutMs);
     if (signal?.aborted) throw cancelled();
     const start = this.now();
     let handle: SdkExecHandle;
@@ -365,23 +387,51 @@ export class MicrosandboxBackend implements Backend {
   }
 
   /** cached: the connection existed before this call, so it may be stale. */
-  private async connectTracked(): Promise<{ sb: SdkSandbox; cached: boolean }> {
+  private async connectTracked(raceMs: number = this.prepareWaitMs): Promise<{ sb: SdkSandbox; cached: boolean }> {
     const cached = this.conn !== undefined;
-    return { sb: await this.connect(), cached };
+    const conn = this.connect();
+    // Create mode, nothing connected yet: do not hold the call past raceMs while the sandbox is prepared.
+    // The pending ensure() keeps running and the next call joins it.
+    const provisioner = this.provisioner;
+    if (!provisioner || this.connReady) return { sb: await conn, cached };
+    let timer: NodeJS.Timeout | undefined;
+    const late = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        reject(new BackendError("preparing", `sandbox "${this.sandboxName}" is still being prepared (${provisioner.progress()}); retry shortly`));
+      }, raceMs);
+    });
+    try {
+      return { sb: await Promise.race([conn, late]), cached };
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   private connect(): Promise<SdkSandbox> {
     if (!this.conn) {
       const p = this.open();
       this.conn = p;
-      p.catch(() => {
-        if (this.conn === p) this.conn = undefined;
-      });
+      this.connReady = false;
+      p.then(
+        () => {
+          if (this.conn === p) this.connReady = true;
+        },
+        () => {
+          if (this.conn === p) this.conn = undefined;
+        },
+      );
     }
     return this.conn;
   }
 
   private async open(): Promise<SdkSandbox> {
+    if (this.provisioner) {
+      try {
+        return await this.provisioner.ensure();
+      } catch (e) {
+        throw e instanceof BackendError ? e : new BackendError("unreachable", msgOf(e));
+      }
+    }
     let sdk: SdkModule;
     try {
       sdk = this.sdk ?? (this.sdk = await this.loadSdk());
@@ -429,7 +479,9 @@ export class MicrosandboxBackend implements Backend {
     const probed = await this.probe();
     if (!probed) return err;
     if (phase === "after") {
-      return new BackendError("outcome_unknown", `${err.message} (${probed.message}; start it with: msb start ${this.sandboxName})`);
+      // Create mode restarts the sandbox itself on the next call; no msb hint.
+      const hint = this.provisioner ? "" : `; start it with: msb start ${this.sandboxName}`;
+      return new BackendError("outcome_unknown", `${err.message} (${probed.message}${hint})`);
     }
     return probed;
   }
@@ -460,7 +512,10 @@ export class MicrosandboxBackend implements Backend {
     const notFound = code !== undefined && NOT_FOUND.has(code);
     const notRunning = code !== undefined && NOT_RUNNING.has(code);
     const connection = code === undefined || CONNECTION.has(code) || notFound || notRunning;
-    if (connection) this.conn = undefined;
+    if (connection) {
+      this.conn = undefined;
+      this.connReady = false;
+    }
     if (phase === "after") return new BackendError("outcome_unknown", msg);
     if (notFound) return new BackendError("not_found", msg);
     if (notRunning) return new BackendError("not_running", msg);
