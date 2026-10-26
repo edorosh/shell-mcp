@@ -19,7 +19,7 @@ Published on npm as [`@edorosh/shell-mcp`](https://www.npmjs.com/package/@edoros
   (arm64 Node on a Mac).
 - A microsandbox sandbox with your project folder mounted and `bash` in its
   image. shell-mcp never creates or starts one.
-- `msb` 0.7.11, matching the SDK that shell-mcp 1.0.2 pins. Without a separate
+- `msb` 0.7.11, matching the SDK that shell-mcp 1.1.0 pins. Without a separate
   install, the runtime packaged with the SDK is used.
 
 ## Quick start
@@ -41,11 +41,11 @@ npx -y -p microsandbox@0.7.11 msb create ubuntu:24.04 --name myproj --mount-dir 
 **2. Check the setup:**
 
 ```powershell
-npx -y @edorosh/shell-mcp@1.0.2 --sandbox myproj --host-root C:\Users\<you>\dev\myproj --guest-root /workspace --check
+npx -y @edorosh/shell-mcp@1.1.0 --sandbox myproj --host-root C:\Users\<you>\dev\myproj --guest-root /workspace --check
 ```
 
 ```zsh
-npx -y @edorosh/shell-mcp@1.0.2 --sandbox myproj --host-root "$(cd ~/dev/myproj && pwd -P)" --guest-root /workspace --check
+npx -y @edorosh/shell-mcp@1.1.0 --sandbox myproj --host-root "$(cd ~/dev/myproj && pwd -P)" --guest-root /workspace --check
 ```
 
 Always use the scoped name with a version. `npx shell-mcp` is an unrelated
@@ -59,7 +59,7 @@ package.
     "sandbox": {
       "command": "cmd",
       "args": [
-        "/c", "npx", "-y", "@edorosh/shell-mcp@1.0.2",
+        "/c", "npx", "-y", "@edorosh/shell-mcp@1.1.0",
         "--sandbox", "myproj",
         "--host-root", "C:\\Users\\<you>\\dev\\myproj",
         "--guest-root", "/workspace"
@@ -75,7 +75,7 @@ and turn off the built-in shell in `.claude/settings.json`:
 { "permissions": { "deny": ["Bash"] } }
 ```
 
-On a Mac, use `"command": "npx"` with `"-y", "@edorosh/shell-mcp@1.0.2", ...`
+On a Mac, use `"command": "npx"` with `"-y", "@edorosh/shell-mcp@1.1.0", ...`
 and `"/Users/<you>/dev/myproj"` as the host root (see
 [Client setup](docs/clients.md)).
 

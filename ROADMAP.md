@@ -54,8 +54,8 @@ building the repo.
 
 ## v2.1: macOS hosts
 
-Status: specified; spike passed on an Apple Silicon Mac (2026-10-26). Ships as
-npm version `1.1.0`. Takes on the macOS half of N6.
+Status: done in code; ships as npm 1.1.0 once the v1.1.0 tag is pushed. Release check on a Mac pending.
+Takes on the macOS half of N6.
 Design: [v2.1 macOS design](docs/superpowers/specs/2026-10-26-shell-mcp-v2.1-macos-design.md).
 Spike: [v2.1 macOS spike results](docs/superpowers/specs/v2.1-macos-spike-results.md).
 

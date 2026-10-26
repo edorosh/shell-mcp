@@ -1,6 +1,6 @@
 # shell-mcp — Product Specification
 
-Status: current through release 1.0.2 (v1 and v2) · Date: 2026-10-25 ·
+Status: current through release 1.1.0 (v1 and v2) · Date: 2026-10-25 ·
 v2 amendments 2026-10-25 · updated 2026-10-26
 
 ## 1. Conventions

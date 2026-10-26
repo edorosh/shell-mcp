@@ -1,6 +1,6 @@
 {
   "name": "@edorosh/shell-mcp",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "description": "MCP server running shell commands inside a microsandbox",
   "license": "MIT",
   "repository": {
