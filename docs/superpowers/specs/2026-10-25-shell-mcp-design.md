@@ -98,8 +98,8 @@ Example `.mcp.json` (Claude Code):
 
 ```json
 { "mcpServers": { "sandbox": {
-  "command": "node", "args": ["C:\\Users\\eugen\\dev\\shell-mcp\\dist\\index.js",
-    "--sandbox", "myproj", "--host-root", "C:\\Users\\eugen\\dev\\myproj",
+  "command": "node", "args": ["C:\\Users\\<you>\\dev\\shell-mcp\\dist\\index.js",
+    "--sandbox", "myproj", "--host-root", "C:\\Users\\<you>\\dev\\myproj",
     "--guest-root", "/workspace"] } } }
 ```
 
@@ -222,7 +222,7 @@ Text content, for example:
 
 ```
 exit code: 0
-cwd: C:\Users\eugen\dev\myproj\src
+cwd: C:\Users\<you>\dev\myproj\src
 ---
 <output>
 ```

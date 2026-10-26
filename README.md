@@ -53,20 +53,21 @@ home; shell-mcp uses it). Create the sandbox as usual. Its version must match
 the SDK (0.7.11 for shell-mcp 1.0.2); `--check` verifies this.
 
 ```powershell
-msb create ubuntu:24.04 --name myproj --mount-dir C:\Users\eugen\dev\myproj:/workspace
+msb create ubuntu:24.04 --name myproj --mount-dir C:\Users\<you>\dev\myproj:/workspace
 ```
 
 **You have no `msb` installed.** Use the runtime packaged with the SDK:
 
 ```powershell
-npx -y -p microsandbox@0.7.11 msb create ubuntu:24.04 --name myproj --mount-dir C:\Users\eugen\dev\myproj:/workspace
+npx -y -p microsandbox@0.7.11 msb create ubuntu:24.04 --name myproj --mount-dir C:\Users\<you>\dev\myproj:/workspace
 ```
 
 `create` also starts the sandbox. If it is stopped later, start it with
 `msb start myproj` (or the same `npx -y -p microsandbox@0.7.11 msb start myproj`);
 until then `shell` returns a tool error, and the next call works once it runs.
 The values to give shell-mcp are the sandbox name (`myproj`), the host folder
-(`C:\Users\eugen\dev\myproj`) and the guest path (`/workspace`).
+(`C:\Users\<you>\dev\myproj`, where `<you>` is your Windows user name; the
+examples below use the same placeholder) and the guest path (`/workspace`).
 
 ## Check
 
@@ -75,7 +76,7 @@ native module, the runtime version, that the sandbox is reachable, that the
 shell runs and that the host folder is mounted at the guest path:
 
 ```powershell
-npx -y @edorosh/shell-mcp@1.0.2 --sandbox myproj --host-root C:\Users\eugen\dev\myproj --guest-root /workspace --check
+npx -y @edorosh/shell-mcp@1.0.2 --sandbox myproj --host-root C:\Users\<you>\dev\myproj --guest-root /workspace --check
 ```
 
 ## Claude Code
@@ -90,7 +91,7 @@ Put `.mcp.json` in your project (example: [examples/claude/.mcp.json](examples/c
       "args": [
         "/c", "npx", "-y", "@edorosh/shell-mcp@1.0.2",
         "--sandbox", "myproj",
-        "--host-root", "C:\\Users\\eugen\\dev\\myproj",
+        "--host-root", "C:\\Users\\<you>\\dev\\myproj",
         "--guest-root", "/workspace"
       ]
     }
@@ -101,7 +102,7 @@ Put `.mcp.json` in your project (example: [examples/claude/.mcp.json](examples/c
 Or add it from the command line:
 
 ```powershell
-claude mcp add sandbox --scope project -- cmd /c npx -y @edorosh/shell-mcp@1.0.2 --sandbox myproj --host-root C:\Users\eugen\dev\myproj --guest-root /workspace
+claude mcp add sandbox --scope project -- cmd /c npx -y @edorosh/shell-mcp@1.0.2 --sandbox myproj --host-root C:\Users\<you>\dev\myproj --guest-root /workspace
 ```
 
 `cmd /c` is what the Claude Code docs prescribe for `npx` on native Windows.
@@ -131,7 +132,7 @@ Put `.vscode/mcp.json` in your project (example:
       "args": [
         "-y", "@edorosh/shell-mcp@1.0.2",
         "--sandbox", "myproj",
-        "--host-root", "C:\\Users\\eugen\\dev\\myproj",
+        "--host-root", "C:\\Users\\<you>\\dev\\myproj",
         "--guest-root", "/workspace"
       ]
     }
@@ -367,19 +368,19 @@ deferred; see [ROADMAP.md](ROADMAP.md).
 To work on shell-mcp itself, clone the repository and build it:
 
 ```powershell
-cd C:\Users\eugen\dev\shell-mcp
+cd C:\Users\<you>\dev\shell-mcp
 npm ci
 npm run build
 ```
 
-The server is then `node C:\Users\eugen\dev\shell-mcp\dist\index.js`, with the same
+The server is then `node C:\Users\<you>\dev\shell-mcp\dist\index.js`, with the same
 flags as above.
 
 To run the integration suite and the SDK spike, in PowerShell, with a running sandbox:
 
 ```powershell
 # Integration suite (repo root)
-$env:SHELL_MCP_IT_SANDBOX="myproj"; $env:SHELL_MCP_IT_HOST_ROOT="C:\Users\eugen\dev\myproj"; $env:SHELL_MCP_IT_GUEST_ROOT="/workspace"; npx vitest run test/integration.test.ts
+$env:SHELL_MCP_IT_SANDBOX="myproj"; $env:SHELL_MCP_IT_HOST_ROOT="C:\Users\<you>\dev\myproj"; $env:SHELL_MCP_IT_GUEST_ROOT="/workspace"; npx vitest run test/integration.test.ts
 ```
 
 Expected: 12 pass, or 11 pass and 1 skipped.

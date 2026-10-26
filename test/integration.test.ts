@@ -1,6 +1,6 @@
 // Acceptance criteria 1-12 of docs/product-spec.md section 13, against a real sandbox.
 // Runs only when SHELL_MCP_IT_SANDBOX is set (see Task 9 in the plan). Usage, PowerShell:
-//   $env:SHELL_MCP_IT_SANDBOX="myproj"; $env:SHELL_MCP_IT_HOST_ROOT="C:\Users\eugen\dev\myproj";
+//   $env:SHELL_MCP_IT_SANDBOX="myproj"; $env:SHELL_MCP_IT_HOST_ROOT="C:\Users\<you>\dev\myproj";
 //   $env:SHELL_MCP_IT_GUEST_ROOT="/workspace"; npx vitest run test/integration.test.ts
 // Criterion 10 stops and starts the sandbox; it only runs with SHELL_MCP_IT_ALLOW_STOP=1.
 import { execFileSync } from "node:child_process";
