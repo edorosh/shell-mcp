@@ -62,7 +62,8 @@ SHELL_MCP_IT_IMAGE=ubuntu:24.04 SHELL_MCP_IT_HOST_ROOT=/Users/<you>/dev npx vite
 ```
 
 CI runs typecheck, build and tests on Ubuntu, Windows and macOS, and the pack
-check on Windows and macOS.
+check on Windows and macOS, on every pull request and again on each push to
+`main`.
 
 ## Releasing
 
