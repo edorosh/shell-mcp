@@ -83,6 +83,7 @@ the acceptance suite passes 12 of 12, and Claude Code and Copilot run
 
 Status: designed (2026-10-26), spike next.
 Design: [v3 create-sandbox design](docs/superpowers/specs/2026-10-26-shell-mcp-v3-create-sandbox-design.md).
+Plan: [v3 implementation plan](docs/superpowers/plans/2026-10-26-shell-mcp-v3.md).
 
 Goal: shell-mcp creates and starts its microsandbox machine when the MCP server
 starts, so the user no longer prepares a sandbox by hand. This takes on
