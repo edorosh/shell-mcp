@@ -17,41 +17,29 @@ Published on npm as [`@edorosh/shell-mcp`](https://www.npmjs.com/package/@edoros
 
 - Windows (x64 or arm64) or macOS on Apple Silicon, with Node.js 22 or newer
   (arm64 Node on a Mac).
-- A microsandbox sandbox with your project folder mounted and `bash` in its
-  image. shell-mcp never creates or starts one.
-- `msb` 0.7.11, matching the SDK that shell-mcp 1.1.0 pins. Without a separate
+- `bash` in the sandbox image (`ubuntu:24.04` has it). shell-mcp creates the
+  sandbox itself, or attaches to one you made (see
+  [Sandbox and runtime](docs/sandbox.md)).
+- `msb` 0.7.11, matching the SDK that shell-mcp 1.2.0 pins. Without a separate
   install, the runtime packaged with the SDK is used.
 
 ## Quick start
 
-**1. Create a sandbox** (here with the packaged runtime; see
-[Sandbox and runtime](docs/sandbox.md) if you already have `msb`):
+**1. Check the setup, and do the first image pull in a terminal** (the sandbox
+is created on first use and keeps running after the client exits):
 
 ```powershell
-npx -y -p microsandbox@0.7.11 msb create ubuntu:24.04 --name myproj --mount-dir C:\Users\<you>\dev\myproj:/workspace
-```
-
-On a Mac (zsh), mount the resolved path, because `msb` rejects a folder that
-goes through a symlink (see [Sandbox and runtime](docs/sandbox.md#macos)):
-
-```zsh
-npx -y -p microsandbox@0.7.11 msb create ubuntu:24.04 --name myproj --mount-dir "$(cd ~/dev/myproj && pwd -P):/workspace"
-```
-
-**2. Check the setup:**
-
-```powershell
-npx -y @edorosh/shell-mcp@1.1.0 --sandbox myproj --host-root C:\Users\<you>\dev\myproj --guest-root /workspace --check
+npx -y @edorosh/shell-mcp@1.2.0 --sandbox myproj --image ubuntu:24.04 --mount C:\Users\<you>\dev\myproj:/workspace --prepare
 ```
 
 ```zsh
-npx -y @edorosh/shell-mcp@1.1.0 --sandbox myproj --host-root "$(cd ~/dev/myproj && pwd -P)" --guest-root /workspace --check
+npx -y @edorosh/shell-mcp@1.2.0 --sandbox myproj --image ubuntu:24.04 --mount /Users/<you>/dev/myproj:/workspace --prepare
 ```
 
 Always use the scoped name with a version. `npx shell-mcp` is an unrelated
 package.
 
-**3. Add it to your client.** Claude Code, in the project's `.mcp.json`:
+**2. Add it to your client.** Claude Code, in the project's `.mcp.json`:
 
 ```json
 {
@@ -59,10 +47,10 @@ package.
     "sandbox": {
       "command": "cmd",
       "args": [
-        "/c", "npx", "-y", "@edorosh/shell-mcp@1.1.0",
+        "/c", "npx", "-y", "@edorosh/shell-mcp@1.2.0",
         "--sandbox", "myproj",
-        "--host-root", "C:\\Users\\<you>\\dev\\myproj",
-        "--guest-root", "/workspace"
+        "--image", "ubuntu:24.04",
+        "--mount", "C:\\Users\\<you>\\dev\\myproj:/workspace"
       ]
     }
   }
@@ -75,15 +63,15 @@ and turn off the built-in shell in `.claude/settings.json`:
 { "permissions": { "deny": ["Bash"] } }
 ```
 
-On a Mac, use `"command": "npx"` with `"-y", "@edorosh/shell-mcp@1.1.0", ...`
-and `"/Users/<you>/dev/myproj"` as the host root (see
+On a Mac, use `"command": "npx"` with `"-y", "@edorosh/shell-mcp@1.2.0", ...`
+and `"/Users/<you>/dev/myproj:/workspace"` as the mount (see
 [Client setup](docs/clients.md)).
 
 For GitHub Copilot in VS Code (`.vscode/mcp.json` plus a hook that blocks its
 built-in shell) and the Copilot CLI, see [Client setup](docs/clients.md).
 Ready-made files are in [examples/](examples/).
 
-**4. Verify:** ask the agent to run `uname -a`. It should report Linux.
+**3. Verify:** ask the agent to run `uname -a`. It should report Linux.
 
 ## Documentation
 

@@ -81,7 +81,7 @@ the acceptance suite passes 12 of 12, and Claude Code and Copilot run
 
 ## v3: Sandbox created from the MCP config
 
-Status: designed (2026-10-26), spike next.
+Status: implemented, release pending (1.2.0).
 Design: [v3 create-sandbox design](docs/superpowers/specs/2026-10-26-shell-mcp-v3-create-sandbox-design.md).
 Plan: [v3 implementation plan](docs/superpowers/plans/2026-10-26-shell-mcp-v3.md).
 

@@ -87,8 +87,9 @@ connected sandbox, plus a read-only `inspectSandbox(spec)` for `--check`).
 
 1. **Wanted config.** `Sandbox.builder(name)` with `.image()`,
    `.pullPolicy("if-missing")`, one `.volume(guest, m => m.bind(resolvedHost))`
-   per mount (`.readonly()` for `:ro`), the network policy (denied by default;
-   `allowDomain`/`allowDomainSuffix` per `--allow-domain`, `allowPublic` for
+   per mount (`.readonly()` for `:ro`), the network policy, set with
+   `.network(n => n.policy(...))` from typed rules (denied by default; an allow
+   rule per `--allow-domain` host or suffix, the public group for
    `--allow-network`, private ranges denied), `.cpus()`/`.memory()` when given,
    and `.detached(true)` so the VM outlives the server process. `.build()`
    yields the config as data.
@@ -203,8 +204,8 @@ from the SDK 0.7.11 typings but never run:
    cpus and memory in a form comparable with `.build()`, including Windows
    drive-letter case and resolved Mac paths.
 3. `createWithPullProgress()` emits usable progress events.
-4. With `allowDomain("example.com")`, `curl` reaches that host while another
-   public host and a LAN address fail; default policy blocks all three.
+4. With `allowDomain("example.com")`, a TCP connect (bash `/dev/tcp`, not curl)
+   reaches that host while another public host and a LAN address fail; default policy blocks all three.
 5. `startDetached` on a stopped sandbox works; `Sandbox.remove` after stop works.
 6. Timings: first create with pull, create with cached image, reuse of a running
    sandbox, start of a stopped one.

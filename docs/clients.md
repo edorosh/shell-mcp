@@ -16,7 +16,7 @@ Put `.mcp.json` in your project (example: [examples/claude/.mcp.json](../example
     "sandbox": {
       "command": "cmd",
       "args": [
-        "/c", "npx", "-y", "@edorosh/shell-mcp@1.1.0",
+        "/c", "npx", "-y", "@edorosh/shell-mcp@1.2.0",
         "--sandbox", "myproj",
         "--host-root", "C:\\Users\\<you>\\dev\\myproj",
         "--guest-root", "/workspace"
@@ -36,7 +36,7 @@ On macOS, use `npx` directly, with the host folder as a literal path. If
     "sandbox": {
       "command": "npx",
       "args": [
-        "-y", "@edorosh/shell-mcp@1.1.0",
+        "-y", "@edorosh/shell-mcp@1.2.0",
         "--sandbox", "myproj",
         "--host-root", "/Users/<you>/dev/myproj",
         "--guest-root", "/workspace"
@@ -49,7 +49,7 @@ On macOS, use `npx` directly, with the host folder as a literal path. If
 Or add it from the command line on Windows:
 
 ```powershell
-claude mcp add sandbox --scope project -- cmd /c npx -y @edorosh/shell-mcp@1.1.0 --sandbox myproj --host-root C:\Users\<you>\dev\myproj --guest-root /workspace
+claude mcp add sandbox --scope project -- cmd /c npx -y @edorosh/shell-mcp@1.2.0 --sandbox myproj --host-root C:\Users\<you>\dev\myproj --guest-root /workspace
 ```
 
 `cmd /c` is what the Claude Code docs prescribe for `npx` on native Windows.
@@ -76,7 +76,7 @@ Put `.vscode/mcp.json` in your project (example:
       "type": "stdio",
       "command": "npx",
       "args": [
-        "-y", "@edorosh/shell-mcp@1.1.0",
+        "-y", "@edorosh/shell-mcp@1.2.0",
         "--sandbox", "myproj",
         "--host-root", "C:\\Users\\<you>\\dev\\myproj",
         "--guest-root", "/workspace"
@@ -153,7 +153,7 @@ References: [VS Code: use tools with agents](https://code.visualstudio.com/docs/
 ## Copilot CLI (untested)
 
 Add the server with `/mcp add`, using the same command and arguments as the
-VS Code example (`npx` with `-y @edorosh/shell-mcp@1.1.0 --sandbox ...`) and
+VS Code example (`npx` with `-y @edorosh/shell-mcp@1.2.0 --sandbox ...`) and
 the name `/mcp` shows. The CLI does not read `.vscode/mcp.json`. To deny the
 built-in shell and allow shell-mcp per session (deny rules win over every allow
 rule, including `--allow-all-tools`):

@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-26
+
+### Added
+
+- Create mode. With `--image`, shell-mcp creates and starts the sandbox named
+  by `--sandbox` itself, so no hand-made sandbox is needed. New flags:
+  `--image`, repeatable `--mount HOST:GUEST[:ro]` (the first is the project
+  mount), `--allow-domain`, `--allow-network`, `--cpus`, `--memory`,
+  `--recreate` and `--prepare`. Without `--image` the server attaches to an
+  existing sandbox with `--host-root` and `--guest-root` as before.
+- The sandbox is persistent: created once, reused by name, and not stopped
+  when the client exits. Stop or remove it with `msb stop` / `msb remove`.
+- The network is denied by default; `--allow-domain` and `--allow-network`
+  open it, and private addresses always stay blocked.
+- If the sandbox differs from the flags, shell-mcp refuses and lists the
+  differences; `--recreate` removes and recreates it (deleting everything in
+  the sandbox outside the mounts).
+- The server answers the MCP handshake at once and prepares the sandbox in the
+  background; an early tool call reports that it is still being prepared.
+  `--prepare` does the first image pull in a terminal. `--check` stays
+  read-only.
+- On macOS, host symlinks in `--mount` paths are resolved automatically.
+
+microsandbox SDK 0.7.11, expects msb 0.7.11.
+
 ## [1.1.0] - 2026-10-26
 
 ### Added
