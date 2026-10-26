@@ -88,6 +88,7 @@ const commands = {
       sb = await pc.awaitSandbox();
     } catch (e) {
       show("create awaitSandbox threw", { ...errInfo(e), ms: Date.now() - t0 });
+      exit(1);
       return;
     }
     show("create done", { ms: Date.now() - t0, name: sb.name, ownsLifecycle: sb.ownsLifecycle, className: sb.constructor?.name });
@@ -106,7 +107,7 @@ const commands = {
   },
   async build() {
     show("build policy", defaultNet ? "none: --default-net, no .network() call" : policy);
-    show("build .build() with .policy(policy)", await makeBuilder().build());
+    show(defaultNet ? "build .build() with no .network() call" : "build .build() with .policy(policy)", await makeBuilder().build());
     await check("build policyJson", async () => {
       show("build .build() with .policyJson(JSON.stringify(policy))", await makeBuilder(true).build());
     });

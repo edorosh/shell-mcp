@@ -174,6 +174,19 @@ describe("create mode", () => {
   it("rejects an empty --image", () => {
     expect(() => parseConfig(["--sandbox", "s", "--image", "", ...base.slice(2)], {}, create)).toThrow(/image/);
   });
+  it("treats empty or blank create-mode env values as unset", () => {
+    const blanks = { SHELL_MCP_IMAGE: "", SHELL_MCP_MOUNT: " ", SHELL_MCP_ALLOW_DOMAIN: "  ", SHELL_MCP_ALLOW_NETWORK: "", SHELL_MCP_CPUS: "", SHELL_MCP_MEMORY: " " };
+    // Attach mode: empties do not trigger "only with --image".
+    const a = parseConfig(base, blanks, create);
+    expect(a.machine).toBeUndefined();
+    // Create mode: empties neither throw nor set anything.
+    const c = parseConfig(img, blanks, create);
+    expect(c.machine).toEqual({ image: "i", allowDomains: [], allowNetwork: false });
+  });
+  it("uses the mount flag when SHELL_MCP_MOUNT is blank, and an empty SHELL_MCP_IMAGE is not an image", () => {
+    expect(parseConfig(img, { SHELL_MCP_MOUNT: "" }, create).mounts).toHaveLength(1);
+    expect(parseConfig(base, { SHELL_MCP_IMAGE: "" }, create).machine).toBeUndefined();
+  });
   it("normalizes guest paths before the uniqueness check", () => {
     expect(() => parseConfig([...img, "--mount", "/h/q:/workspace/./"], {}, create)).toThrow(/duplicate/);
     expect(() => parseConfig([...img, "--mount", "/h/q:/a/../workspace"], {}, create)).toThrow(/duplicate/);

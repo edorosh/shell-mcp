@@ -137,12 +137,17 @@ export function parseConfig(
   const pick = (flag: string, envName: string): string | undefined =>
     (values as Record<string, string | undefined>)[flag] ?? env[envName];
 
+  // Create-mode variables: an empty or blank value counts as unset (a bare flag value is still checked).
+  const envv = (name: string): string | undefined => (env[name]?.trim() ? env[name] : undefined);
+  const pickCreate = (flag: string, envName: string): string | undefined =>
+    (values as Record<string, string | undefined>)[flag] ?? envv(envName);
+
   const sandbox = pick("sandbox", "SHELL_MCP_SANDBOX");
   if (!sandbox) throw new ConfigError("sandbox is required (--sandbox or SHELL_MCP_SANDBOX)");
 
   const p = hostPathFor(platform);
   const v = values as Record<string, string | string[] | boolean | undefined>;
-  const rawImage = pick("image", "SHELL_MCP_IMAGE");
+  const rawImage = pickCreate("image", "SHELL_MCP_IMAGE");
   if (rawImage !== undefined && rawImage.trim() === "") throw new ConfigError("image must not be empty");
   const image = rawImage?.trim();
 
@@ -153,7 +158,7 @@ export function parseConfig(
       throw new ConfigError("--host-root and --guest-root do not apply with --image; use --mount");
     }
     const specs = (v.mount as string[] | undefined) ??
-      (env.SHELL_MCP_MOUNT ?? "").split(";").map((x) => x.trim()).filter((x) => x !== "");
+      (envv("SHELL_MCP_MOUNT") ?? "").split(";").map((x) => x.trim()).filter((x) => x !== "");
     if (specs.length === 0) throw new ConfigError("--image needs at least one --mount (or SHELL_MCP_MOUNT)");
     const seen = new Set<string>();
     for (const spec of specs) {
@@ -170,23 +175,23 @@ export function parseConfig(
       mounts.push({ host: m.host, hostResolved, guest: m.guest, readonly: m.readonly });
     }
     const domains = ((v["allow-domain"] as string[] | undefined) ??
-      (env.SHELL_MCP_ALLOW_DOMAIN ?? "").split(",")).map((x) => x.trim()).filter((x) => x !== "");
-    const cpus = pick("cpus", "SHELL_MCP_CPUS");
-    const memory = pick("memory", "SHELL_MCP_MEMORY");
+      (envv("SHELL_MCP_ALLOW_DOMAIN") ?? "").split(",")).map((x) => x.trim()).filter((x) => x !== "");
+    const cpus = pickCreate("cpus", "SHELL_MCP_CPUS");
+    const memory = pickCreate("memory", "SHELL_MCP_MEMORY");
     machine = {
       image,
       allowDomains: domains,
-      allowNetwork: (v["allow-network"] as boolean | undefined) ?? truthy(env.SHELL_MCP_ALLOW_NETWORK),
+      allowNetwork: (v["allow-network"] as boolean | undefined) ?? truthy(envv("SHELL_MCP_ALLOW_NETWORK")),
       ...(cpus === undefined ? {} : { cpus: parseIntSetting("cpus", cpus) }),
       ...(memory === undefined ? {} : { memoryMib: parseMemory(memory) }),
     };
   } else {
     const createOnly: [string, boolean][] = [
-      ["--mount", v.mount !== undefined || !!env.SHELL_MCP_MOUNT],
-      ["--allow-domain", v["allow-domain"] !== undefined || !!env.SHELL_MCP_ALLOW_DOMAIN],
-      ["--allow-network", v["allow-network"] !== undefined || truthy(env.SHELL_MCP_ALLOW_NETWORK)],
-      ["--cpus", pick("cpus", "SHELL_MCP_CPUS") !== undefined],
-      ["--memory", pick("memory", "SHELL_MCP_MEMORY") !== undefined],
+      ["--mount", v.mount !== undefined || !!envv("SHELL_MCP_MOUNT")],
+      ["--allow-domain", v["allow-domain"] !== undefined || !!envv("SHELL_MCP_ALLOW_DOMAIN")],
+      ["--allow-network", v["allow-network"] !== undefined || truthy(envv("SHELL_MCP_ALLOW_NETWORK"))],
+      ["--cpus", pickCreate("cpus", "SHELL_MCP_CPUS") !== undefined],
+      ["--memory", pickCreate("memory", "SHELL_MCP_MEMORY") !== undefined],
       ["--recreate", v.recreate === true],
     ];
     const bad = createOnly.find(([, set]) => set);

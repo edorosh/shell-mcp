@@ -10,6 +10,10 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const env = process.env;
+// The server gets the ambient environment minus every SHELL_MCP_* key (user settings and SHELL_MCP_IT_*
+// must not leak in); what a test needs is passed as flags.
+const serverEnv = (): Record<string, string> =>
+  Object.fromEntries(Object.entries(env).filter((e): e is [string, string] => e[1] !== undefined && !e[0].startsWith("SHELL_MCP_")));
 const ENABLED = Boolean(env.SHELL_MCP_IT_IMAGE && env.SHELL_MCP_IT_HOST_ROOT);
 const DIST = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "dist", "index.js");
 const GUEST = "/workspace";
@@ -41,7 +45,7 @@ describe.skipIf(!ENABLED)("create mode (real sandbox)", () => {
   ];
 
   const start = async (args: string[]): Promise<Running> => {
-    const transport = new StdioClientTransport({ command: process.execPath, args: [DIST, ...args], env: { ...(env as Record<string, string>) }, stderr: "pipe" });
+    const transport = new StdioClientTransport({ command: process.execPath, args: [DIST, ...args], env: serverEnv(), stderr: "pipe" });
     let err = "";
     transport.stderr?.on("data", (d) => (err += String(d)));
     const client = new Client({ name: "shell-mcp-it", version: "0.0.0" });
