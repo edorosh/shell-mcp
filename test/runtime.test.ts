@@ -79,6 +79,34 @@ describe("checkRuntime", () => {
       note: "msb does not report its version; cannot compare with SDK 0.7.11",
     });
   });
+
+  it("uses the Apple Silicon hint when no runtime resolves on darwin/x64", async () => {
+    const d: RuntimeDeps = {
+      resolveRuntime: () => {
+        throw new Error("no msb");
+      },
+      resolveRuntimeVersion: async () => "0.7.11",
+    };
+    const r = await checkRuntime("0.7.11", d, { platform: "darwin", arch: "x64" });
+    expect(r).toEqual({ ok: false, message: `no msb; ${MAC_MSG}` });
+    expect(runtimeLogLine(r)).toContain("macOS needs Apple Silicon");
+  });
+
+  it("hints instead of rejecting when the SDK import itself fails", async () => {
+    vi.resetModules();
+    vi.doMock("microsandbox", () => {
+      throw new Error("Cannot find native binding");
+    });
+    try {
+      const fresh = await import("../src/runtime.js");
+      const r = await fresh.checkRuntime("0.7.11", undefined, { platform: "darwin", arch: "x64" });
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.message.endsWith(`; ${MAC_MSG}`)).toBe(true);
+    } finally {
+      vi.doUnmock("microsandbox");
+      vi.resetModules();
+    }
+  });
 });
 
 describe("runtimeLogLine", () => {
@@ -110,16 +138,4 @@ describe("nativeHint", () => {
     "keeps the reinstall hint on %s/%s", (p, a) => {
       expect(nativeHint(p, a)).toBe("reinstall shell-mcp without --omit=optional on this OS and CPU");
     });
-});
-
-it("uses the Apple Silicon hint when no runtime resolves on darwin/x64", async () => {
-  const d: RuntimeDeps = {
-    resolveRuntime: () => {
-      throw new Error("no msb");
-    },
-    resolveRuntimeVersion: async () => "0.7.11",
-  };
-  const r = await checkRuntime("0.7.11", d, { platform: "darwin", arch: "x64" });
-  expect(r).toEqual({ ok: false, message: `no msb; ${MAC_MSG}` });
-  expect(runtimeLogLine(r)).toContain("macOS needs Apple Silicon");
 });

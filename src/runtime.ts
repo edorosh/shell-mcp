@@ -29,9 +29,10 @@ export async function checkRuntime(
   host: { platform: NodeJS.Platform; arch: NodeJS.Architecture } = { platform: process.platform, arch: process.arch },
 ): Promise<RuntimeCheck> {
   const hint = (e: unknown) => `${text(e)}; ${nativeHint(host.platform, host.arch)}`;
-  const d = deps ?? (await defaultDeps());
+  let d: RuntimeDeps;
   let resolved: { msbPath: string; origin: string };
   try {
+    d = deps ?? (await defaultDeps());
     resolved = d.resolveRuntime();
   } catch (e) {
     return { ok: false, message: hint(e) };
