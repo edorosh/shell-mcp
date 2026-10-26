@@ -187,14 +187,21 @@ describe("networkPolicy", () => {
     expect(networkPolicy(spec())).toEqual({ defaultEgress: "deny", defaultIngress: "deny", rules: [] });
   });
 
+  it("is the same whatever the order, case or repeats of the domains", () => {
+    const a = networkPolicy(spec({ allowDomains: ["B.example", "*.Github.com", "a.example"] }));
+    const b = networkPolicy(spec({ allowDomains: ["a.example", "*.github.com", "b.EXAMPLE", "a.example"] }));
+    expect(a).toEqual(b);
+    expect(JSON.stringify(a)).toBe(JSON.stringify(b));
+  });
+
   it("allows DNS and each domain", () => {
     const p = networkPolicy(spec({ allowDomains: ["registry.npmjs.org", "*.github.com"] })) as AnyPolicy;
     expect(p.defaultEgress).toBe("deny");
     expect(p.defaultIngress).toBe("deny");
     expect(p.rules).toEqual([
       { direction: "egress", destination: { kind: "group", group: "host" }, protocols: ["udp", "tcp"], ports: [{ start: 53, end: 53 }], action: "allow" },
-      { direction: "egress", destination: { kind: "domain", domain: "registry.npmjs.org" }, protocols: [], ports: [], action: "allow" },
       { direction: "egress", destination: { kind: "domainSuffix", suffix: "github.com" }, protocols: [], ports: [], action: "allow" },
+      { direction: "egress", destination: { kind: "domain", domain: "registry.npmjs.org" }, protocols: [], ports: [], action: "allow" },
     ]);
   });
 
@@ -208,6 +215,23 @@ describe("networkPolicy", () => {
   });
 });
 
+describe("compareOwned network details", () => {
+  const owned = (s: ReturnType<typeof spec>): OwnedConfig => ({ image: "i", mounts: [], network: JSON.stringify(networkPolicy(s)) });
+  it("names added and removed domains and the allow-network switch", () => {
+    const have = owned(spec({ allowDomains: ["a.example", "c.example"] }));
+    const want = owned(spec({ allowDomains: ["a.example", "b.example", "*.d.example"], allowNetwork: true }));
+    expect(compareOwned(have, want, "linux")).toEqual([
+      "allowed domains added: *.d.example, b.example",
+      "allowed domains removed: c.example",
+      "--allow-network on",
+    ]);
+    expect(compareOwned(want, have, "linux")).toContain("--allow-network off");
+  });
+  it("falls back to a bare message when nothing is derivable", () => {
+    expect(compareOwned({ image: "i", mounts: [], network: "a" }, { image: "i", mounts: [], network: "b" }, "linux")).toEqual(["network policy changed"]);
+  });
+});
+
 describe("networkPolicy and wantedOwned against the real SDK (no VM)", () => {
   it("matches the SDK's Rule/Destination factories", async () => {
     const { Rule, Destination } = await import("microsandbox");
@@ -216,8 +240,8 @@ describe("networkPolicy and wantedOwned against the real SDK (no VM)", () => {
       defaultIngress: "deny",
       rules: [
         Rule.allowDns(),
-        Rule.allowEgress(Destination.domain("a.example")),
         Rule.allowEgress(Destination.domainSuffix("b.example")),
+        Rule.allowEgress(Destination.domain("a.example")),
         Rule.allowEgress(Destination.group("public")),
       ],
     });

@@ -87,7 +87,9 @@ const ALLOW_DNS = {
 /** Denied by default; DNS plus each --allow-domain, and the public group for --allow-network. Private ranges stay denied. */
 export function networkPolicy(spec: MachineSpec): object {
   const rules: object[] = [];
-  for (const d of spec.allowDomains) {
+  // Lower-cased, de-duplicated and sorted, so flag order or case never reads as a changed policy.
+  const domains = [...new Set(spec.allowDomains.map((d) => d.toLowerCase()))].sort();
+  for (const d of domains) {
     rules.push(allow(d.startsWith("*.") ? { kind: "domainSuffix", suffix: d.slice(2) } : { kind: "domain", domain: d }));
   }
   if (spec.allowNetwork) rules.push(allow({ kind: "group", group: "public" }));
@@ -159,6 +161,39 @@ export function ownedFromSdkConfig(cfg: unknown): OwnedConfig {
   return owned;
 }
 
+/** Allowed domains (suffixes as `*.x`) and whether the public group is open, read from canonical policy JSON. */
+function policyAllows(network: string): { domains: Set<string>; open: boolean } | undefined {
+  try {
+    const p = obj(JSON.parse(network));
+    const rules = p?.rules;
+    if (!p || !Array.isArray(rules)) return undefined;
+    const domains = new Set<string>();
+    let open = false;
+    for (const r of rules) {
+      const d = obj(obj(r)?.destination);
+      if (d?.kind === "domain" && typeof d.domain === "string") domains.add(d.domain);
+      else if (d?.kind === "domainSuffix" && typeof d.suffix === "string") domains.add(`*.${d.suffix}`);
+      else if (d?.kind === "group" && d.group === "public") open = true;
+    }
+    return { domains, open };
+  } catch {
+    return undefined;
+  }
+}
+
+function networkDiffs(have: string, want: string): string[] {
+  const h = policyAllows(have);
+  const w = policyAllows(want);
+  if (!h || !w) return ["network policy changed"];
+  const out: string[] = [];
+  const added = [...w.domains].filter((d) => !h.domains.has(d)).sort();
+  const removed = [...h.domains].filter((d) => !w.domains.has(d)).sort();
+  if (added.length) out.push(`allowed domains added: ${added.join(", ")}`);
+  if (removed.length) out.push(`allowed domains removed: ${removed.join(", ")}`);
+  if (h.open !== w.open) out.push(`--allow-network ${w.open ? "on" : "off"}`);
+  return out.length ? out : ["network policy changed"];
+}
+
 /** Differences from `have` (the existing sandbox) to `want` (the flags), one line each. */
 export function compareOwned(have: OwnedConfig, want: OwnedConfig, platform: NodeJS.Platform): string[] {
   const diffs: string[] = [];
@@ -177,7 +212,7 @@ export function compareOwned(have: OwnedConfig, want: OwnedConfig, platform: Nod
       if (h.readonly !== w.readonly) diffs.push(`mount ${g} read-only ${w.readonly ? "on" : "off"}`);
     }
   }
-  if (have.network !== want.network) diffs.push("network policy changed");
+  if (have.network !== want.network) diffs.push(...networkDiffs(have.network, want.network));
   const show = (v: number | undefined) => (v === undefined ? "default" : String(v));
   if (want.cpus !== undefined && have.cpus !== want.cpus) diffs.push(`cpus ${show(have.cpus)} → ${want.cpus}`);
   if (want.memoryMib !== undefined && have.memoryMib !== want.memoryMib) {
