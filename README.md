@@ -96,7 +96,7 @@ npm run build
 ```
 
 See [Development](docs/development.md) for the integration suite against a real
-sandbox, the SDK spike and platform pitfalls, [releasing.md](docs/releasing.md)
+sandbox and platform pitfalls, [releasing.md](docs/releasing.md)
 for releases, and the [product spec](docs/product-spec.md) for the requirements.
 Coding agents read [AGENTS.md](AGENTS.md).
 

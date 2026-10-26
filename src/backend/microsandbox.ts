@@ -1,8 +1,8 @@
 /*
  * Backend over the microsandbox SDK (microsandbox@0.7.11, pinned exactly).
  *
- * Behavior below was derived from the SDK source, not from a live run (no Task 1 spike yet).
- * Assumptions to verify in the Task 1 spike:
+ * Behavior below was derived from the SDK source and checked in the SDK spikes on Windows and macOS
+ * (docs/superpowers/specs/*spike-results.md), except where docs/known-issues.md says otherwise:
  *  - A timed-out execStream is SIGKILLed by the SDK and ends with a raw "exited" event whose code is
  *    -1 (agentd exit_code() for a non-normal exit), not an ExecTimeoutError (only wait()/collect()).
  *    We do not rely on that alone: half a second past the deadline we kill the exec ourselves,
