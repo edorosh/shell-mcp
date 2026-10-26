@@ -16,7 +16,7 @@ const exit = (code) => process.stdout.write("", () => process.exit(code));
 const usage = "usage: node spike/v3-create.mjs <create|config|build|net|stop|start|remove> <name> [hostDir]";
 if (!cmd || !name || ((cmd === "create" || cmd === "build") && !hostDir)) {
   console.error(usage);
-  exit(2);
+  process.exit(2); // nothing on stdout yet; exit at once so the command does not run
 }
 
 const show = (label, value) =>
