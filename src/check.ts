@@ -117,12 +117,12 @@ export async function runCheck(config: Config, deps: CheckDeps, write: (line: st
     try {
       const ls = await deps.backend.run(`ls -A1 -- ${shQuote(m.guest)}`, { timeoutMs: CHECK_TIMEOUT_MS });
       if (ls.timedOut || ls.exitCode !== 0) {
-        fail("mount", `listing ${m.guest} in the sandbox failed (${ls.timedOut ? "timed out" : `exit code ${ls.exitCode ?? "unknown"}`}); is the host root mounted at the guest root?`);
+        fail("mount", `listing ${m.guest} in the sandbox failed (${ls.timedOut ? "timed out" : `exit code ${ls.exitCode ?? "unknown"}`}); is ${m.host} mounted at ${m.guest}?`);
       } else {
         const guest = ls.output.split("\n").map((l) => l.replace(/\r$/, "")).filter((l) => l !== "");
         const host = await deps.readdir(m.host);
         if (host.length === 0) {
-          ok("mount", `host root is empty, so the mount cannot be verified; add a file and rerun for a real check`);
+          ok("mount", `${m.host} is empty, so the mount cannot be verified; add a file and rerun for a real check`);
         } else {
           const missingInGuest = diff(host, guest, fold);
           const missingOnHost = diff(guest, host, fold);

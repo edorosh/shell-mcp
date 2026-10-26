@@ -205,4 +205,24 @@ describe("runCheck connect guard", () => {
     expect(line(lines, "mount")).toMatch(/^skipped/);
     expect(fb.runs).toHaveLength(1);
   });
+
+  it("prints one mount line per mount", async () => {
+    const fb = new FakeBackend();
+    fb.queueRun(out("Linux\n")).queueRun(out("a\nb\n")).queueRun({ output: "", exitCode: 2, timedOut: false, droppedChars: 0 });
+    const lines: string[] = [];
+    const config = cfg({ mounts: [
+      { host: "/home/me/proj", hostResolved: "/home/me/proj", guest: "/workspace", readonly: false },
+      { host: "/home/me/data", hostResolved: "/home/me/data", guest: "/data", readonly: true },
+    ] });
+    const code = await runCheck(config, {
+      loadSdk: async () => ({}), backend: fb, runtime: async () => okRuntime, readdir: async () => ["a", "b"],
+    }, (l) => lines.push(l));
+    expect(code).toBe(1);
+    expect(lines.filter((l) => l.includes(" mount:"))).toHaveLength(2);
+    expect(lines.find((l) => l.startsWith("ok") && l.includes(" mount:"))).toContain("/home/me/proj matches /workspace");
+    const failed = lines.find((l) => l.startsWith("FAIL") && l.includes(" mount:"));
+    expect(failed).toContain("/data");
+    expect(failed).toContain("/home/me/data");
+    expect(lines[0]).toContain("/home/me/proj -> /workspace, /home/me/data -> /data");
+  });
 });

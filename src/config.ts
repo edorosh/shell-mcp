@@ -84,7 +84,7 @@ export function parseMount(s: string, platform: NodeJS.Platform): { host: string
   const rawGuest = rest.slice(i + 1);
   const p = hostPathFor(platform);
   if (!p.isAbsolute(rawHost)) throw new ConfigError(`mount host path must be absolute: ${JSON.stringify(s)}`);
-  const guest = rawGuest.replace(/\/+$/, "");
+  const guest = path.posix.normalize(rawGuest).replace(/\/+$/, "");
   if (guest === "") throw new ConfigError(`mount guest path must not be /: ${JSON.stringify(s)}`);
   return { host: normalizeHost(p, rawHost), guest, readonly };
 }
@@ -142,7 +142,9 @@ export function parseConfig(
 
   const p = hostPathFor(platform);
   const v = values as Record<string, string | string[] | boolean | undefined>;
-  const image = pick("image", "SHELL_MCP_IMAGE") || undefined;
+  const rawImage = pick("image", "SHELL_MCP_IMAGE");
+  if (rawImage !== undefined && rawImage.trim() === "") throw new ConfigError("image must not be empty");
+  const image = rawImage?.trim();
 
   const mounts: Mount[] = [];
   let machine: MachineSpec | undefined;
@@ -167,8 +169,8 @@ export function parseConfig(
       }
       mounts.push({ host: m.host, hostResolved, guest: m.guest, readonly: m.readonly });
     }
-    const domains = (v["allow-domain"] as string[] | undefined) ??
-      (env.SHELL_MCP_ALLOW_DOMAIN ?? "").split(",").map((x) => x.trim()).filter((x) => x !== "");
+    const domains = ((v["allow-domain"] as string[] | undefined) ??
+      (env.SHELL_MCP_ALLOW_DOMAIN ?? "").split(",")).map((x) => x.trim()).filter((x) => x !== "");
     const cpus = pick("cpus", "SHELL_MCP_CPUS");
     const memory = pick("memory", "SHELL_MCP_MEMORY");
     machine = {

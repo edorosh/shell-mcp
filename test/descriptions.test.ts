@@ -39,3 +39,25 @@ describe("describeTools with several mounts", () => {
     expect(describeTools(cfg).shell).not.toContain("Also mounted");
   });
 });
+
+describe("single-mount description keeps the 1.1.0 wording", () => {
+  it("matches exactly", () => {
+    const c = parseConfig(
+      ["--sandbox", "sb", "--host-root", "/h/p", "--guest-root", "/workspace"],
+      {},
+      { platform: "linux", exists: () => true },
+    );
+    expect(describeTools(c).shell).toBe(
+      "Run a shell command (bash) inside an isolated Linux sandbox, not on the host machine. " +
+      "The host directory /h/p is mounted in the sandbox at /workspace; the command starts in /workspace " +
+      "and only files under that directory are shared with the host. " +
+      "The working directory persists between calls, but environment variables and shell state (aliases, functions) do not. " +
+      "Do not rely on cd across parallel calls: each starts in the directory current when it starts, and the last to finish sets it. " +
+      "Default timeout is 120 seconds, maximum 600 seconds (timeout_ms). " +
+      "Use run_in_background for servers and other long-running processes; it returns a job id to use with shell_output, shell_kill and shell_list. " +
+      "Interactive programs (editors, pagers, prompts waiting for input) are not supported. " +
+      "Paths in output under /workspace are shown as host paths under /h/p. " +
+      "To read or edit files, use your file tools with host paths (/h/p) rather than shell commands.",
+    );
+  });
+});

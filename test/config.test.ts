@@ -165,4 +165,18 @@ describe("create mode", () => {
     expect(parseCli(["--prepare", "--version"], {})).toEqual({ mode: "version" });
     expect(parseCli(["--prepare", "--check", ...img], {}, create).mode).toBe("check");
   });
+  it("rejects SHELL_MCP_MOUNT without --image", () => {
+    expect(() => parseConfig(base, { SHELL_MCP_MOUNT: "/a:/x" }, create)).toThrow(/only with --image/);
+  });
+  it("rejects an empty --image", () => {
+    expect(() => parseConfig(["--sandbox", "s", "--image", "", ...base.slice(2)], {}, create)).toThrow(/image/);
+  });
+  it("normalizes guest paths before the uniqueness check", () => {
+    expect(() => parseConfig([...img, "--mount", "/h/q:/workspace/./"], {}, create)).toThrow(/duplicate/);
+    expect(() => parseConfig([...img, "--mount", "/h/q:/a/../workspace"], {}, create)).toThrow(/duplicate/);
+  });
+  it("trims and drops empty --allow-domain values", () => {
+    const c = parseConfig([...img, "--allow-domain", " a.com ", "--allow-domain", ""], {}, create);
+    expect(c.machine?.allowDomains).toEqual(["a.com"]);
+  });
 });
