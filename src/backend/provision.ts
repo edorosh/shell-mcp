@@ -133,8 +133,8 @@ function canonical(v: unknown): string {
 }
 
 /**
- * Owned settings from a SandboxConfig. Field paths come from `.build()` in microsandbox 0.7.11,
- * pending spike step 2 (which checks that `handle.config()` has the same shape):
+ * Owned settings from a SandboxConfig. Field paths are the same in `.build()` and in an existing
+ * sandbox's `handle.config()` (microsandbox 0.7.11, checked by the Windows spike):
  *   image.Oci.reference, mounts[].{guest, host, options.readonly}, network.policy,
  *   resources.{cpus, memoryMib}.
  * Missing fields read as undefined (or empty), never throw.
@@ -170,10 +170,15 @@ function policyAllows(network: string): { domains: Set<string>; open: boolean } 
     const domains = new Set<string>();
     let open = false;
     for (const r of rules) {
+      // `.build()` and `config()` hold the wire form ({domain: x}, {domainSuffix: x}, {group: g});
+      // the typed form ({kind, ...}) is accepted too.
       const d = obj(obj(r)?.destination);
-      if (d?.kind === "domain" && typeof d.domain === "string") domains.add(d.domain);
-      else if (d?.kind === "domainSuffix" && typeof d.suffix === "string") domains.add(`*.${d.suffix}`);
-      else if (d?.kind === "group" && d.group === "public") open = true;
+      const suffix = d?.kind === "domainSuffix" ? d.suffix : d?.kind === undefined ? d?.domainSuffix : undefined;
+      const domain = d?.kind === undefined || d.kind === "domain" ? d?.domain : undefined;
+      const group = d?.kind === undefined || d.kind === "group" ? d?.group : undefined;
+      if (typeof domain === "string") domains.add(domain);
+      else if (typeof suffix === "string") domains.add(`*.${suffix}`);
+      else if (group === "public") open = true;
     }
     return { domains, open };
   } catch {

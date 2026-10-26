@@ -2,7 +2,7 @@
 //   node spike/v3-create.mjs create <name> <hostDir> [--default-net]   (--default-net: no .network() call)
 //   node spike/v3-create.mjs config <name>
 //   node spike/v3-create.mjs build <name> <hostDir>
-//   node spike/v3-create.mjs net <name>
+//   node spike/v3-create.mjs net <name> [host:port ...]   (extra targets, e.g. your router's LAN address)
 //   node spike/v3-create.mjs stop|start|remove <name>
 // Prints `### label: json` lines. Run from a clone with `npm ci` done (SDK from node_modules).
 // `create` exits WITHOUT stopping or disposing the sandbox on purpose: that is what it tests.
@@ -10,7 +10,7 @@ import { readFileSync } from "node:fs";
 
 const args = process.argv.slice(2);
 const defaultNet = args.includes("--default-net");
-const [cmd, name, hostDir] = args.filter((a) => a !== "--default-net");
+const [cmd, name, hostDir, ...rest] = args.filter((a) => a !== "--default-net");
 // Flush stdout before exiting. process.exit is kept on purpose: create must not dispose the sandbox.
 const exit = (code) => process.stdout.write("", () => process.exit(code));
 const usage = "usage: node spike/v3-create.mjs <create|config|build|net|stop|start|remove> <name> [hostDir]";
@@ -119,11 +119,15 @@ const commands = {
     show("net status", h.status);
     const sb = await h.connectWithTimeout(10_000);
     show("net reuse timing", { getMs: tGet, connectMs: Date.now() - t0 - tGet, getPlusConnectMs: Date.now() - t0 });
-    const probes = [["example.com", 443], ["www.iana.org", 443], ["192.168.1.1", 80]];
+    // A TCP connect alone can succeed against the sandbox's own network stack, so each probe also
+    // sends an HTTP request and reports the reply's first bytes: `reply` non-empty = really reached.
+    const extra = [hostDir, ...rest].filter(Boolean).map((t) => [t.slice(0, t.lastIndexOf(":")), Number(t.slice(t.lastIndexOf(":") + 1))]);
+    const probes = [["example.com", 80], ["www.iana.org", 80], ["192.168.1.1", 80], ["10.0.0.1", 80], ...extra];
     for (const [host, port] of probes) {
       await check(`net ${host}:${port}`, async () => {
         const t0 = Date.now();
-        const script = `timeout 5 bash -c 'exec 3<>/dev/tcp/${host}/${port}'`;
+        const req = `HEAD / HTTP/1.0\\r\\nHost: ${host}\\r\\n\\r\\n`;
+        const script = `timeout 5 bash -c 'exec 3<>/dev/tcp/${host}/${port} && echo connected && printf "${req}" >&3 && echo "reply: $(head -c 40 <&3 | tr -d "\\r\\n")"'`;
         const eh = await sb.execStreamWith("bash", (b) => b.args(["-c", script]).timeout(15_000).stdinNull());
         const out = await eh.collect();
         show(`net ${host}:${port}`, { code: out.code, success: out.success, stdout: out.stdout(), stderr: out.stderr(), ms: Date.now() - t0 });

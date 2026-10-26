@@ -216,7 +216,12 @@ describe("networkPolicy", () => {
 });
 
 describe("compareOwned network details", () => {
-  const owned = (s: ReturnType<typeof spec>): OwnedConfig => ({ image: "i", mounts: [], network: JSON.stringify(networkPolicy(s)) });
+  // Wire form, as `.build()` and `config()` hold the policy.
+  const owned = (s: ReturnType<typeof spec>): OwnedConfig => ({
+    image: "i",
+    mounts: [],
+    network: JSON.stringify(wirePolicy(networkPolicy(s) as AnyPolicy)),
+  });
   it("names added and removed domains and the allow-network switch", () => {
     const have = owned(spec({ allowDomains: ["a.example", "c.example"] }));
     const want = owned(spec({ allowDomains: ["a.example", "b.example", "*.d.example"], allowNetwork: true }));
@@ -226,6 +231,12 @@ describe("compareOwned network details", () => {
       "--allow-network on",
     ]);
     expect(compareOwned(want, have, "linux")).toContain("--allow-network off");
+  });
+  it("also reads the typed form", () => {
+    const typed = (s: ReturnType<typeof spec>): OwnedConfig => ({ image: "i", mounts: [], network: JSON.stringify(networkPolicy(s)) });
+    expect(compareOwned(typed(spec()), typed(spec({ allowDomains: ["*.a.example"] })), "linux")).toEqual([
+      "allowed domains added: *.a.example",
+    ]);
   });
   it("falls back to a bare message when nothing is derivable", () => {
     expect(compareOwned({ image: "i", mounts: [], network: "a" }, { image: "i", mounts: [], network: "b" }, "linux")).toEqual(["network policy changed"]);
@@ -273,6 +284,52 @@ describe("networkPolicy and wantedOwned against the real SDK (no VM)", () => {
 });
 
 describe("ownedFromSdkConfig", () => {
+  // Trimmed from the Windows spike (microsandbox 0.7.11): `.build()` and the stored `config()` of
+  // the sandbox it created. The stored one adds rootDisk, cmd, env, labels and the digest.
+  const policy = {
+    defaultEgress: "deny",
+    defaultIngress: "deny",
+    rules: [
+      { direction: "egress", destination: { group: "host" }, protocols: ["udp", "tcp"], ports: [{ start: 53, end: 53 }], action: "allow" },
+      { direction: "egress", destination: { domain: "example.com" }, protocols: [], ports: [], action: "allow" },
+    ],
+  };
+  const mountCfg = { type: "Bind", host: "C:\\temp\\v3-ws", guest: "/workspace", options: { readonly: false, noexec: false } };
+  const built = {
+    image: { Oci: { reference: "ubuntu:24.04" } },
+    resources: { cpus: 1, memoryMib: 1024, maxCpus: 1, maxMemoryMib: 1024 },
+    env: [],
+    labels: {},
+    mounts: [mountCfg],
+    network: { enabled: true, policy, maxTcpConnections: null },
+    manifestDigest: null,
+  };
+  const stored = {
+    image: { Oci: { reference: "ubuntu:24.04", rootDisk: { kind: "managed", sizeMib: 4096 } } },
+    resources: { cpus: 1, memoryMib: 1024, maxCpus: 1, maxMemoryMib: 1024 },
+    runtime: { cmd: ["/bin/bash"] },
+    env: [{ key: "PATH", value: "/usr/bin:/bin" }],
+    labels: { "org.opencontainers.image.version": "24.04" },
+    mounts: [mountCfg],
+    network: { enabled: true, policy: { rules: policy.rules, defaultIngress: "deny", defaultEgress: "deny" }, maxConnections: null },
+    manifestDigest: "sha256:a2d4",
+  };
+
+  it("reads a stored config() the same as the .build() it came from", () => {
+    expect(ownedFromSdkConfig(stored)).toEqual(ownedFromSdkConfig(built));
+    expect(compareOwned(ownedFromSdkConfig(stored), ownedFromSdkConfig(built), "win32")).toEqual([]);
+  });
+
+  it("names a domain change between two stored policies", () => {
+    const more = { ...stored, network: { policy: { ...policy, rules: [...policy.rules, { direction: "egress", destination: { domainSuffix: "github.com" }, protocols: [], ports: [], action: "allow" }] } } };
+    expect(compareOwned(ownedFromSdkConfig(stored), ownedFromSdkConfig(more), "win32")).toEqual(["allowed domains added: *.github.com"]);
+  });
+
+  it("reads a sandbox created without a policy as a changed policy", () => {
+    const none = { ...stored, network: { enabled: true, strict: true } };
+    expect(compareOwned(ownedFromSdkConfig(none), ownedFromSdkConfig(stored), "win32")).toEqual(["network policy changed"]);
+  });
+
   it("tolerates missing fields", () => {
     expect(ownedFromSdkConfig(undefined)).toEqual({ image: "", mounts: [], network: "null" });
     expect(ownedFromSdkConfig({ image: "ubuntu:24.04", mounts: [{ guest: "/w" }] })).toEqual({
