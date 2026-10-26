@@ -81,7 +81,7 @@ the acceptance suite passes 12 of 12, and Claude Code and Copilot run
 
 ## v3: Sandbox created from the MCP config
 
-Status: implemented, release pending (1.2.0).
+Status: merged to `main` (PR #16); release pending (tag v1.2.0).
 Design: [v3 create-sandbox design](docs/superpowers/specs/2026-10-26-shell-mcp-v3-create-sandbox-design.md).
 Plan: [v3 implementation plan](docs/superpowers/plans/2026-10-26-shell-mcp-v3.md).
 
@@ -120,10 +120,36 @@ shares one definition and richer settings fit without long flag lists.
 - A project `shell-mcp.json` passed with `--config`, holding what v3's flags
   hold (image, mounts, network rules, resources) plus room for more structure,
   such as environment variables and finer network rules.
+- Secrets: pass a host environment variable into the sandbox as a placeholder
+  that microsandbox swaps for the real value only on requests to allowed
+  hosts, so the guest never sees the token. Each secret names its env var,
+  allowed hosts and, optionally, its own placeholder. A custom placeholder is
+  needed for tools that check the token's format (Copilot rejects the default
+  `$MSB_<VAR>`). Only the SDK can set it (`SecretBuilder.placeholder()`); the
+  `msb` CLI and its YAML config cannot, so create mode is the way to get it.
 - v3 flags keep working.
 
 Done when: one MCP entry with `--config` gives the same sandbox as the
 equivalent v3 flags.
+
+## Project site on GitHub Pages
+
+Status: idea. Not tied to a package release.
+
+Goal: a public page that explains what shell-mcp is, so people who find the
+repo or the npm package see the project at a glance.
+
+- A GitHub Pages site for the repo with the project description: what it
+  does, why commands run in a sandbox, supported hosts and clients, and a
+  quick start with a pinned `npx -y @edorosh/shell-mcp@x.y.z` example.
+- Links to the docs pages, the npm package, the changelog and this roadmap.
+- Built and deployed from `main` by a GitHub Actions workflow, with no
+  content duplicated from `docs/` by hand.
+- Link the site from the README, the npm package `homepage` and the repo
+  description.
+
+Done when: the Pages URL shows the project description and quick start, and
+the README and npm page link to it.
 
 ## v4: Linux hosts
 
