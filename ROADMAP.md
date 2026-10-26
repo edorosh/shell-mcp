@@ -27,8 +27,10 @@ Known issues:
 
 ## v2: npm package for easy install on Windows
 
-Status: specified. Ships as npm version `1.0.0`; milestone numbers and
-package versions are unrelated.
+Status: done. 1.0.0 published 2026-10-25; 1.0.1 was the first CI release
+with trusted publishing; current release 1.0.2. Milestone numbers and package
+versions are unrelated. Spec: [product-spec.md](docs/product-spec.md) (C10 to
+C12, B5, §12a).
 Design: [v2 npm distribution design](docs/superpowers/specs/2026-10-25-shell-mcp-v2-npm-design.md).
 Plan: [v2 implementation plan](docs/superpowers/plans/2026-10-25-shell-mcp-v2.md).
 

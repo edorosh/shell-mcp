@@ -1,6 +1,7 @@
 # shell-mcp — Product Specification
 
-Status: Draft v1 · Date: 2026-10-25 · v2 amendments 2026-10-25
+Status: current through release 1.0.2 (v1 and v2) · Date: 2026-10-25 ·
+v2 amendments 2026-10-25 · updated 2026-10-26
 
 ## 1. Conventions
 
@@ -116,6 +117,27 @@ These outcomes make the product a failure even if it otherwise works:
   stdout while it serves MCP. Diagnostics MUST go to stderr. Informational
   modes that exit without serving MCP (`--version`, `--help`, `--check`) MAY
   print to stdout. (Amended 2026-10-25, v2.)
+- C10. Informational modes (added 2026-10-25, v2). Each MUST exit without
+  serving MCP:
+  - `--help` prints usage (every setting, its environment variable and its
+    default) and exits 0.
+  - `--version` prints the instance's version and the backend SDK version
+    and exits 0.
+  - `--check` requires the normal configuration, runs the diagnostics in C11,
+    prints one line per step (`ok`, `FAIL` with a hint, or `skipped`) and
+    exits 0 when every step passes and 1 otherwise.
+  `--help` and `--version` need no other setting and win over invalid
+  configuration, unknown flags and each other. Precedence is `--help`,
+  `--version`, `--check`, then MCP mode.
+- C11. `--check` steps, in order: configuration valid (C6); backend native
+  components load; backend runtime resolves and its version matches the one
+  the implementation was built for (B5); sandbox reachable and running;
+  configured shell runs and reports Linux; host root and guest root list the
+  same entries (case-insensitive on Windows hosts). A step that cannot run
+  because an earlier one failed is reported as `skipped`. `--check` MUST be
+  read-only and MUST NOT write files on either side.
+- C12. The MCP `initialize` response (`serverInfo.version`) MUST report the
+  instance's released version. (Added 2026-10-26, 1.0.2.)
 
 ## 6. Backend
 
@@ -129,6 +151,12 @@ These outcomes make the product a failure even if it otherwise works:
 - B4. When the sandbox is stopped or missing, the implementation MUST fail
   the tool call (§10) rather than start or create it. The error message
   SHOULD tell the user how to start the sandbox.
+- B5. Where the backend has a separately installed runtime whose version
+  must match its SDK (microsandbox: `msb`), the implementation MUST pin the
+  SDK to an exact version, and after connecting to the client SHOULD log to
+  stderr which runtime it resolved, from where, and its version. A version
+  mismatch MUST be a stderr warning only and MUST NOT stop the instance or
+  delay serving (C7). (Added 2026-10-25, v2.)
 
 ## 7. Tools
 
@@ -340,8 +368,16 @@ The project MUST ship user documentation covering:
 - I3. Turning off each client's built-in shell tool, so the agent can only
   run commands through shell-mcp:
   - Claude Code: a permissions deny rule for `Bash` in project settings.
-  - GitHub Copilot: deselecting the built-in terminal tools in the tool
-    picker or tool sets.
+  - GitHub Copilot in VS Code, Copilot harness: a `preToolUse` repository
+    hook (`.github/hooks/`) that denies the built-in shell tools, with a
+    Windows (PowerShell) and a Linux/macOS (bash) script. (Amended
+    2026-10-25.)
+  - GitHub Copilot in VS Code, Local harness: deselecting the built-in
+    terminal tools in the tool picker, or a custom agent with an explicit
+    tools list.
+  - Copilot CLI: `--deny-tool` for the built-in shell.
+  The documentation MUST say which of these options were verified with a
+  real client.
 - I4. Sandbox image requirements: the configured shell (default `bash`)
   MUST be installed in the sandbox.
 - I5. Verifying the setup, for example by asking the agent to run `uname -a`
@@ -349,10 +385,41 @@ The project MUST ship user documentation covering:
 - I6. Install without building: the documentation MUST give a client config
   that runs the published package at an exact version, and MUST NOT use the
   unscoped name `shell-mcp`. (Added 2026-10-25, v2.)
+- I7. Running `--check` before configuring a client, a global install for
+  offline start, upgrading, the backend runtime version each release
+  expects, measured client timeout behavior, troubleshooting for known
+  host problems, and the known limitations. (Added 2026-10-26.)
+- I8. The README stays short: what shell-mcp is, requirements, a quick start
+  (create a sandbox, `--check`, one client config, verify), and how to build
+  and test. Everything else lives in `docs/` and is linked from the README.
+  (Added 2026-10-26.)
+
+## 12a. Distribution and release
+
+Added 2026-10-25, v2.
+
+- R1. The server MUST be published to the npm registry as
+  `@edorosh/shell-mcp` under the MIT license, with a `bin` entry that starts
+  from `cmd`, PowerShell and the clients' MCP launchers on Windows.
+- R2. Versions follow semantic versioning. Every release MUST have a
+  `CHANGELOG.md` section, which SHOULD name the backend SDK version and the
+  runtime version it was tested with.
+- R3. Releases MUST be published from CI on a pushed `vX.Y.Z` tag, using npm
+  trusted publishing (OIDC, no stored token) with provenance. The release
+  job MUST refuse a tag that does not match `package.json` and the
+  changelog, MUST run typecheck, tests and a pack check first, and MUST be
+  safe to rerun (an already published version is skipped). It creates a
+  GitHub release from the changelog section.
+- R4. A pack check MUST verify that the tarball contains exactly the
+  runtime files, README, license and changelog, and that the installed
+  `bin` starts through npm's shim. CI MUST run it on Windows.
+- R5. Pinned versions in the README, `docs/` and `examples/` MUST be updated
+  in every release.
 
 ## 13. Acceptance criteria
 
-A conforming v1 implementation passes all of these on a Windows host:
+A conforming implementation passes all of these on a Windows host (1 to 12
+from v1, 13 to 17 from v2 and later):
 
 1. `shell` with `echo hi` returns `hi` and exit code 0.
 2. `shell` with `exit 3` returns exit code 3 and no tool error.
@@ -383,3 +450,15 @@ A conforming v1 implementation passes all of these on a Windows host:
     Note (ruling): verified with `--no-rewrite-output-paths`, for the same
     reason as criterion 3 (with default rewriting, `pwd` prints the host form;
     the current-directory field shows the host form either way).
+13. `--version` prints the package version and the SDK version and exits 0;
+    `--help` prints usage and exits 0, even with no other flags.
+14. `--check` against a running, correctly mounted sandbox prints `ok` for
+    every step and exits 0; with the sandbox stopped it fails the sandbox
+    step with how to start it, skips the later steps and exits 1.
+15. A runtime version that differs from the pinned SDK fails `--check` and
+    only logs a warning in MCP mode.
+16. The `initialize` response reports the package version as
+    `serverInfo.version`.
+17. A fresh user, with nothing cloned or built, runs the published package
+    through `npx -y @edorosh/shell-mcp@<version>` from Claude Code and
+    GitHub Copilot, and `uname -a` reports Linux.

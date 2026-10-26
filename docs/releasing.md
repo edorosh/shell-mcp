@@ -42,7 +42,8 @@ published by hand and CI publishes every later release.
 1. `npm version <x.y.z> --no-git-tag-version`
 2. Move the `## [Unreleased]` entries under a new `## [x.y.z] - YYYY-MM-DD`
    heading in `CHANGELOG.md`.
-3. Update the pinned `@edorosh/shell-mcp@x.y.z` in `README.md` and `examples/`.
+3. Update the pinned `@edorosh/shell-mcp@x.y.z` in `README.md`, `docs/` and
+   `examples/` (`git grep -n "shell-mcp@"` finds them).
 4. Open a PR and merge it.
 5. On `main`: `git tag vX.Y.Z`, then `git push origin vX.Y.Z`.
 
