@@ -19,6 +19,38 @@ npm config delete os
 Then re-run the `--check` command. If the Linux package is already cached,
 clear the npx cache (see the next entry) before retrying.
 
+## The sandbox is "still being prepared"
+
+In create mode the server answers at once and creates the sandbox in the
+background, so a `shell` call made during the first image pull returns `sandbox
+"myproj" is still being prepared (pulling ubuntu:24.04, 60%); retry shortly`.
+Retry the call. To do the first pull in a terminal, run the same flags with
+`--prepare` (see [Sandbox and runtime](sandbox.md#create-mode)). If the
+preparation fails (no network for the pull, unknown image, runtime missing),
+the call returns that error and the next call tries again. A provisioning
+attempt that never ends (a hung pull) needs a client restart. If two clients
+create the same sandbox at the same moment, one may show a one-time
+name-conflict error; the next call recovers.
+
+## The sandbox "was created with different settings"
+
+In create mode the full message is `sandbox "myproj" was created with different
+settings: image ubuntu:22.04 → ubuntu:24.04, mount /cache added. Restart with
+--recreate ...`. The existing sandbox no longer matches the image, mounts,
+network flags, `--cpus` or `--memory` in your config, and shell-mcp will not
+change it silently. Either put the old settings back, or run once with
+`--recreate` (add `--prepare` to do it in a terminal). `--recreate` deletes
+everything in the sandbox outside the mounts. Files in the mounts are on your
+host and stay.
+
+## The image must contain bash
+
+If `--check` or the first command fails because the shell cannot run, the hint
+reads `the image must contain bash, or your --shell`. The configured shell
+(default `bash`) is the only one used, with no `sh` fallback. Use an image that
+has bash, such as `ubuntu:24.04`, or name a shell the image does have with
+`--shell`. Changing the image of an existing sandbox needs `--recreate`.
+
 ## `msb create` says the mount goes through a symlink
 
 On a Mac, `msb create` fails with `invalid config: bind mount host path ...

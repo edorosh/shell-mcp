@@ -38,7 +38,7 @@ describe.skipIf(!ENABLED)("acceptance criteria (section 13)", () => {
       ["--sandbox", sandbox, "--host-root", hostBase, "--guest-root", guestBase, ...extra],
       {},
     );
-    hostRoot = cfg.hostRoot;
+    hostRoot = cfg.mounts[0].host;
     maxOutput = cfg.maxOutput;
     backend = new MicrosandboxBackend(cfg.sandbox, cfg.shell, cfg.maxOutput);
     svc = new ShellService(cfg, backend);
@@ -57,8 +57,8 @@ describe.skipIf(!ENABLED)("acceptance criteria (section 13)", () => {
   beforeEach(async () => {
     scratch = `it-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const cfg = make();
-    hostDir = path.join(cfg.hostRoot, scratch);
-    guestDir = `${cfg.guestRoot === "/" ? "" : cfg.guestRoot}/${scratch}`;
+    hostDir = path.join(cfg.mounts[0].host, scratch);
+    guestDir = `${cfg.mounts[0].guest === "/" ? "" : cfg.mounts[0].guest}/${scratch}`;
     fs.mkdirSync(hostDir, { recursive: true });
     // Work inside the scratch dir for every test.
     const r = await svc.shell({ command: `cd ${scratch}` });

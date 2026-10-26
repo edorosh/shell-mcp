@@ -105,6 +105,33 @@ describe("ShellService.shell foreground", () => {
     expect(r.text).toContain("cwd: C:\\Users\\e\\proj\n");
   });
 
+  it("reports preparing and config_mismatch as not started, with the message unchanged", async () => {
+    const { fb, svc } = setup();
+    for (const kind of ["preparing", "config_mismatch"] as const) {
+      fb.queueRun(new BackendError(kind, `detail for ${kind}`));
+      const r = await svc.shell({ command: "x" });
+      expect(r.isError).toBe(true);
+      expect(r.text).toBe(`Command was not started: detail for ${kind}`);
+    }
+  });
+
+  it("create mode never mentions msb for not_running and unreachable; attach texts are unchanged", async () => {
+    const create = parseConfig(["--sandbox", "sb", "--image", "i", "--mount", "/h/p:/workspace"], {},
+      { platform: "darwin", exists: () => true, realpath: (p: string) => p });
+    const c = setup(create);
+    c.fb.queueRun(new BackendError("not_running", "stopped"));
+    expect((await c.svc.shell({ command: "x" })).text).toBe('Command was not started: sandbox "sb" is not running; the next call starts it again.');
+    c.fb.queueRun(new BackendError("unreachable", "pull failed: unknown image"));
+    expect((await c.svc.shell({ command: "x" })).text).toBe('Command was not started: sandbox "sb" is unreachable: pull failed: unknown image. The next call retries.');
+    c.fb.queueRun(new BackendError("not_found", "nope"));
+    expect((await c.svc.shell({ command: "x" })).text).toBe('Command was not started: sandbox "sb" does not exist any more; the next call creates it again.');
+    const a = setup();
+    a.fb.queueRun(new BackendError("not_running", "stopped"));
+    expect((await a.svc.shell({ command: "x" })).text).toBe('Command was not started: sandbox "sb" is not running. Start it with: msb start sb');
+    a.fb.queueRun(new BackendError("unreachable", "boom"));
+    expect((await a.svc.shell({ command: "x" })).text).toBe('Command was not started: sandbox "sb" is unreachable: boom. If it is stopped, start it with: msb start sb');
+  });
+
   it("maps backend errors", async () => {
     const { fb, svc } = setup();
     fb.queueRun(new BackendError("not_running", "stopped"));

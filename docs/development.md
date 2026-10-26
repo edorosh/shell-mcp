@@ -39,6 +39,28 @@ export PATH="$PWD/node_modules/@superradcompany/microsandbox-darwin-arm64/bin:$P
 SHELL_MCP_IT_SANDBOX=myproj SHELL_MCP_IT_HOST_ROOT="$(cd ~/dev/myproj && pwd -P)" SHELL_MCP_IT_GUEST_ROOT=/workspace npx vitest run test/integration.test.ts
 ```
 
+### Create-mode suite
+
+`test/integration.create.test.ts` starts the built server (`dist/index.js`) over MCP stdio
+and lets it create a throwaway sandbox `shell-mcp-it-<random>`, which it stops and removes
+afterwards. It needs no existing sandbox, but it needs a build and two variables:
+`SHELL_MCP_IT_IMAGE` and `SHELL_MCP_IT_HOST_ROOT` (a folder; a temp folder is made inside it
+and mounted at `/workspace`). Without them the suite is skipped. The first case pulls the
+image and can take a few minutes. In PowerShell:
+
+```powershell
+npm run build
+$env:SHELL_MCP_IT_IMAGE="ubuntu:24.04"; $env:SHELL_MCP_IT_HOST_ROOT="C:\Users\<you>\dev"; npx vitest run test/integration.create.test.ts
+```
+
+On macOS, with the bundled `msb` on `PATH` as above:
+
+```zsh
+npm run build
+export PATH="$PWD/node_modules/@superradcompany/microsandbox-darwin-arm64/bin:$PATH"
+SHELL_MCP_IT_IMAGE=ubuntu:24.04 SHELL_MCP_IT_HOST_ROOT=/Users/<you>/dev npx vitest run test/integration.create.test.ts
+```
+
 CI runs typecheck, build and tests on Ubuntu, Windows and macOS, and the pack
 check on Windows and macOS.
 

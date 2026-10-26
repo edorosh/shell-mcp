@@ -7,13 +7,13 @@ import { backendErrorText } from "../src/service.js";
 import { FakeBackend } from "./fakeBackend.js";
 
 const cfg = (over: Partial<Config> = {}): Config => ({
-  sandbox: "dev", hostRoot: "/home/me/proj", guestRoot: "/workspace", defaultTimeoutMs: 120000,
+  sandbox: "dev", mounts: [{ host: "/home/me/proj", hostResolved: "/home/me/proj", guest: "/workspace", readonly: false }], recreate: false, defaultTimeoutMs: 120000,
   maxTimeoutMs: 600000, maxOutput: 30000, rewriteOutputPaths: true, shell: "bash", platform: "linux", ...over,
 });
 const out = (output: string) => ({ output, exitCode: 0, timedOut: false, droppedChars: 0 });
 const okRuntime: RuntimeCheck = { ok: true, origin: "packaged", msbPath: "/x/msb", version: "0.7.11" };
 
-function setup(o: { fb?: FakeBackend; sdk?: () => Promise<unknown>; runtime?: RuntimeCheck; host?: string[]; config?: Config; arch?: NodeJS.Architecture } = {}) {
+function setup(o: { fb?: FakeBackend; sdk?: () => Promise<unknown>; runtime?: RuntimeCheck; host?: string[]; config?: Config; arch?: NodeJS.Architecture; inspect?: CheckDeps["inspect"] } = {}) {
   const fb = o.fb ?? new FakeBackend();
   const lines: string[] = [];
   const deps: CheckDeps = {
@@ -22,6 +22,7 @@ function setup(o: { fb?: FakeBackend; sdk?: () => Promise<unknown>; runtime?: Ru
     runtime: async () => o.runtime ?? okRuntime,
     readdir: async () => o.host ?? ["a", "b"],
     arch: o.arch,
+    inspect: o.inspect,
   };
   const run = async () => {
     const code = await runCheck(o.config ?? cfg(), deps, (l) => lines.push(l));
@@ -204,5 +205,135 @@ describe("runCheck connect guard", () => {
     expect(line(lines, "shell")).toMatch(/^skipped/);
     expect(line(lines, "mount")).toMatch(/^skipped/);
     expect(fb.runs).toHaveLength(1);
+  });
+
+  it("prints one mount line per mount", async () => {
+    const fb = new FakeBackend();
+    fb.queueRun(out("Linux\n")).queueRun(out("a\nb\n")).queueRun({ output: "", exitCode: 2, timedOut: false, droppedChars: 0 });
+    const lines: string[] = [];
+    const config = cfg({ mounts: [
+      { host: "/home/me/proj", hostResolved: "/home/me/proj", guest: "/workspace", readonly: false },
+      { host: "/home/me/data", hostResolved: "/home/me/data", guest: "/data", readonly: true },
+    ], machine: { image: "i", allowDomains: [], allowNetwork: false } });
+    const code = await runCheck(config, {
+      loadSdk: async () => ({}), backend: fb, runtime: async () => okRuntime, readdir: async () => ["a", "b"],
+      inspect: async () => ({ state: "ok", status: "running" }),
+    }, (l) => lines.push(l));
+    expect(code).toBe(1);
+    expect(lines.filter((l) => l.includes(" mount:"))).toHaveLength(2);
+    expect(lines.find((l) => l.startsWith("ok") && l.includes(" mount:"))).toContain("/home/me/proj matches /workspace");
+    const failed = lines.find((l) => l.startsWith("FAIL") && l.includes(" mount:"));
+    expect(failed).toContain("/data");
+    expect(failed).toContain("/home/me/data");
+    expect(lines[0]).toContain("/home/me/proj -> /workspace, /home/me/data -> /data");
+  });
+});
+
+describe("runCheck config line", () => {
+  it("keeps the 1.1.0 wording in attach mode", async () => {
+    const { fb, run } = setup();
+    fb.queueRun(out("Linux\n")).queueRun(out("a\nb\n"));
+    const { lines } = await run();
+    expect(lines[0]).toBe('ok      config: sandbox "dev", host root /home/me/proj, guest root /workspace');
+  });
+
+  it("lists the mounts in create mode", async () => {
+    const { fb, run } = setup({ config: cfg({ machine: { image: "i", allowDomains: [], allowNetwork: false } }), inspect: async () => ({ state: "ok", status: "running" }) });
+    fb.queueRun(out("Linux\n")).queueRun(out("a\nb\n"));
+    const { lines } = await run();
+    expect(lines[0]).toBe('ok      config: sandbox "dev", mounts /home/me/proj -> /workspace');
+  });
+});
+
+describe("runCheck in create mode", () => {
+  const machine = { image: "ubuntu:24.04", allowDomains: [], allowNetwork: false };
+  const create = () => cfg({ machine });
+
+  it("fails with 'not created yet' when the sandbox is absent and skips the rest", async () => {
+    const { fb, run } = setup({ config: create(), inspect: async () => ({ state: "absent" }) });
+    const { code, lines } = await run();
+    expect(code).toBe(1);
+    expect(lines).toContain('FAIL    sandbox: "dev" is not created yet; run with --prepare');
+    expect(lines).toContain("skipped shell: sandbox failed");
+    expect(lines).toContain("skipped mount: sandbox failed");
+    expect(fb.runs).toEqual([]);
+  });
+
+  it("fails on a mismatch without touching the backend", async () => {
+    const { fb, run } = setup({ config: create(), inspect: async () => ({ state: "mismatch", diffs: ["image a -> b", "mount /c added"] }) });
+    const { code, lines } = await run();
+    expect(code).toBe(1);
+    expect(lines).toContain("FAIL    definition: image a -> b; mount /c added");
+    expect(fb.runs).toEqual([]);
+  });
+
+  it("reports the definition then runs today's steps", async () => {
+    const { fb, run } = setup({ config: create(), inspect: async () => ({ state: "ok", status: "running" }) });
+    fb.queueRun(out("Linux\n")).queueRun(out("a\nb\n"));
+    const { code, lines } = await run();
+    expect(code).toBe(0);
+    expect(lines).toContain("ok      definition: matches the flags");
+    expect(lines.findIndex((l) => l.includes(" runtime:"))).toBeLessThan(lines.findIndex((l) => l.includes(" definition:")));
+    expect(lines.findIndex((l) => l.includes(" definition:"))).toBeLessThan(lines.findIndex((l) => l.includes(" sandbox:")));
+  });
+
+  it("says run with --prepare for a matching but stopped sandbox, in the sandbox and mount steps' wording", async () => {
+    const { fb, run } = setup({ config: create(), inspect: async () => ({ state: "ok", status: "stopped" }) });
+    fb.queueRun(new BackendError("not_running", "stopped"));
+    const { code, lines } = await run();
+    expect(code).toBe(1);
+    expect(line(lines, "sandbox")).toBe('FAIL    sandbox: sandbox "dev" is not running; run with --prepare or start the client');
+    expect(lines.join("\n")).not.toContain("next call");
+  });
+
+  it("uses create wording in the mount step", async () => {
+    const { fb, run } = setup({ config: create(), inspect: async () => ({ state: "ok", status: "running" }) });
+    fb.queueRun(out("Linux\n")).queueRun(new BackendError("unreachable", "gone"));
+    const { lines } = await run();
+    expect(line(lines, "mount")).toContain("The next call retries.");
+    expect(line(lines, "mount")).not.toContain("msb");
+  });
+
+  it("guards a hanging inspect with the same deadline", async () => {
+    const fb = new FakeBackend();
+    const lines: string[] = [];
+    const code = await runCheck(create(), {
+      loadSdk: async () => ({}), backend: fb, runtime: async () => okRuntime, readdir: async () => [],
+      inspect: () => new Promise(() => {}), timeoutMs: 20,
+    }, (l) => lines.push(l));
+    expect(code).toBe(1);
+    expect(lines.some((l) => l.startsWith("FAIL    definition: no response within"))).toBe(true);
+    expect(lines).toContain("skipped shell: definition failed");
+    expect(fb.runs).toEqual([]);
+  });
+
+  it("has no definition step in attach mode", async () => {
+    const { fb, run } = setup();
+    fb.queueRun(out("Linux\n")).queueRun(out("a\nb\n"));
+    const { lines } = await run();
+    expect(lines.some((l) => l.includes("definition"))).toBe(false);
+  });
+
+  it("hints at the image when the shell does not run", async () => {
+    const { fb, run } = setup({ config: create(), inspect: async () => ({ state: "ok", status: "running" }) });
+    fb.queueRun(out("nope\n"));
+    const { lines } = await run();
+    expect(line(lines, "shell")).toContain("the image must contain bash, or your --shell");
+  });
+
+  it("fails the definition step when inspect throws", async () => {
+    const { fb, run } = setup({ config: create(), inspect: async () => { throw new Error("boom"); } });
+    const { code, lines } = await run();
+    expect(code).toBe(1);
+    expect(lines).toContain("FAIL    definition: boom");
+    expect(lines).toContain("skipped sandbox: definition failed");
+    expect(fb.runs).toEqual([]);
+  });
+
+  it("skips runtime, definition, sandbox, shell and mount when the native module fails", async () => {
+    const { run } = setup({ config: create(), sdk: async () => { throw new Error("no native"); }, inspect: async () => ({ state: "absent" }) });
+    const { code, lines } = await run();
+    expect(code).toBe(1);
+    for (const s of ["runtime", "definition", "sandbox", "shell", "mount"]) expect(lines).toContain(`skipped ${s}: native module failed`);
   });
 });

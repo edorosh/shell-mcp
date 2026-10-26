@@ -4,10 +4,10 @@
       "type": "stdio",
       "command": "npx",
       "args": [
-        "-y", "@edorosh/shell-mcp@1.1.0",
+        "-y", "@edorosh/shell-mcp@1.2.0",
         "--sandbox", "myproj",
-        "--host-root", "C:\\Users\\<you>\\dev\\myproj",
-        "--guest-root", "/workspace"
+        "--image", "ubuntu:24.04",
+        "--mount", "C:\\Users\\<you>\\dev\\myproj:/workspace"
       ]
     }
   }

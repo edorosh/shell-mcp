@@ -1,5 +1,6 @@
 import { type Backend, BackendError } from "./backend/types.js";
 import type { Config } from "./config.js";
+import type { Inspect } from "./backend/provision.js";
 import { nativeHint, type RuntimeCheck } from "./runtime.js";
 import { backendErrorText } from "./service.js";
 import { shQuote } from "./wrap.js";
@@ -9,6 +10,8 @@ export interface CheckDeps {
   backend: Backend;
   runtime(): Promise<RuntimeCheck>;
   readdir(p: string): Promise<string[]>;
+  /** Create mode: read-only look at the sandbox against the flags (`Provisioner.inspect`). */
+  inspect?: () => Promise<Inspect>;
   /** Overrides the sandbox step's hard deadline; tests only. */
   timeoutMs?: number;
   /** Overrides the CPU architecture for the native step hint; tests only. */
@@ -24,6 +27,19 @@ function diff(a: string[], b: string[], fold: (s: string) => string): string[] {
   return a.filter((n) => !other.has(fold(n)));
 }
 
+/** Races `p` against a deadline; the backend applies its own timeout only after connecting, so guard a hang. */
+async function withDeadline<T>(p: Promise<T>, ms: number): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const noResponse = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new NoResponse()), ms);
+  });
+  try {
+    return await Promise.race([p, noResponse]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 const names = (xs: string[]) => {
   const shown = xs.slice(0, 5).join(", ");
   return xs.length > 5 ? `${shown} (+${xs.length - 5} more)` : shown;
@@ -35,6 +51,8 @@ const names = (xs: string[]) => {
  */
 export async function runCheck(config: Config, deps: CheckDeps, write: (line: string) => void): Promise<0 | 1> {
   let failed = false;
+  const create = config.machine !== undefined;
+  const shellHint = create ? `the image must contain ${config.shell}, or your --shell` : `is ${config.shell} installed in the image? or set --shell`;
   const ok = (step: string, detail: string) => write(`ok      ${step}: ${detail}`);
   const fail = (step: string, detail: string) => {
     failed = true;
@@ -42,7 +60,8 @@ export async function runCheck(config: Config, deps: CheckDeps, write: (line: st
   };
   const skipped = (step: string, why: string) => write(`skipped ${step}: ${why}`);
 
-  ok("config", `sandbox "${config.sandbox}", host root ${config.hostRoot}, guest root ${config.guestRoot}`);
+  if (create) ok("config", `sandbox "${config.sandbox}", mounts ${config.mounts.map((m) => `${m.host} -> ${m.guest}`).join(", ")}`);
+  else ok("config", `sandbox "${config.sandbox}", host root ${config.mounts[0].host}, guest root ${config.mounts[0].guest}`);
 
   // 2. native module
   try {
@@ -50,7 +69,7 @@ export async function runCheck(config: Config, deps: CheckDeps, write: (line: st
     ok("native module", "microsandbox loaded");
   } catch (e) {
     fail("native module", `${msg(e)}; ${nativeHint(config.platform, deps.arch ?? process.arch)}`);
-    for (const s of ["runtime", "sandbox", "shell", "mount"]) skipped(s, "native module failed");
+    for (const s of [...(create ? ["runtime", "definition"] : ["runtime"]), "sandbox", "shell", "mount"]) skipped(s, "native module failed");
     return 1;
   }
 
@@ -63,20 +82,33 @@ export async function runCheck(config: Config, deps: CheckDeps, write: (line: st
     fail("runtime", msg(e));
   }
 
+  // 3b. create mode: the sandbox exists and matches the flags (read-only)
+  const limit = deps.timeoutMs ?? CHECK_TIMEOUT_MS + 5_000;
+  if (create && deps.inspect) {
+    try {
+      const r = await withDeadline(deps.inspect(), limit);
+      if (r.state === "absent") {
+        fail("sandbox", `"${config.sandbox}" is not created yet; run with --prepare`);
+        for (const s of ["shell", "mount"]) skipped(s, "sandbox failed");
+        return 1;
+      }
+      if (r.state === "mismatch") {
+        fail("definition", r.diffs.join("; "));
+        for (const s of ["sandbox", "shell", "mount"]) skipped(s, "definition failed");
+        return 1;
+      }
+      ok("definition", "matches the flags");
+    } catch (e) {
+      fail("definition", e instanceof NoResponse ? `no response within ${Math.round(limit / 1000)}s from "${config.sandbox}"; check the sandbox state` : msg(e));
+      for (const s of ["sandbox", "shell", "mount"]) skipped(s, "definition failed");
+      return 1;
+    }
+  }
+
   // 4 and 5: one `uname -s` run
   let uname: Awaited<ReturnType<Backend["run"]>> | undefined;
-  const limit = deps.timeoutMs ?? CHECK_TIMEOUT_MS + 5_000;
   try {
-    // The backend applies its timeout only after connecting, so guard a connect that never returns.
-    let timer: NodeJS.Timeout | undefined;
-    const noResponse = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => reject(new NoResponse()), limit);
-    });
-    try {
-      uname = await Promise.race([deps.backend.run("uname -s", { timeoutMs: CHECK_TIMEOUT_MS }), noResponse]);
-    } finally {
-      clearTimeout(timer);
-    }
+    uname = await withDeadline(deps.backend.run("uname -s", { timeoutMs: CHECK_TIMEOUT_MS }), limit);
   } catch (e) {
     if (e instanceof NoResponse) {
       fail("sandbox", `no response within ${Math.round(limit / 1000)}s from "${config.sandbox}"; check the sandbox state`);
@@ -86,12 +118,15 @@ export async function runCheck(config: Config, deps: CheckDeps, write: (line: st
     }
     if (e instanceof BackendError && e.kind === "not_started") {
       ok("sandbox", `"${config.sandbox}" is running`);
-      fail("shell", `${e.message}; is ${config.shell} installed in the image? or set --shell`);
+      fail("shell", `${e.message}; ${shellHint}`);
       skipped("mount", "shell failed");
       return 1;
     }
     const err = e instanceof BackendError ? e : new BackendError("outcome_unknown", msg(e));
-    fail("sandbox", backendErrorText(err, config.sandbox));
+    // --check never starts a sandbox, so the create-mode "next call starts it" wording does not fit here.
+    fail("sandbox", create && err.kind === "not_running"
+      ? `sandbox "${config.sandbox}" is not running; run with --prepare or start the client`
+      : backendErrorText(err, config.sandbox, create));
     skipped("shell", "sandbox failed");
     skipped("mount", "sandbox failed");
     return 1;
@@ -105,7 +140,7 @@ export async function runCheck(config: Config, deps: CheckDeps, write: (line: st
   ok("sandbox", `"${config.sandbox}" is running`);
   const kernel = uname.output.trim();
   if (uname.exitCode !== 0 || kernel !== "Linux") {
-    fail("shell", `uname -s gave ${JSON.stringify(kernel)} with exit code ${uname.exitCode ?? "unknown"}, expected Linux with exit 0; is ${config.shell} installed in the image? or set --shell`);
+    fail("shell", `uname -s gave ${JSON.stringify(kernel)} with exit code ${uname.exitCode ?? "unknown"}, expected Linux with exit 0; ${shellHint}`);
     skipped("mount", "shell failed");
     return 1;
   }
@@ -113,31 +148,33 @@ export async function runCheck(config: Config, deps: CheckDeps, write: (line: st
 
   // 6. mount
   const fold = config.platform === "win32" ? (s: string) => s.toLowerCase() : (s: string) => s;
-  try {
-    const ls = await deps.backend.run(`ls -A1 -- ${shQuote(config.guestRoot)}`, { timeoutMs: CHECK_TIMEOUT_MS });
-    if (ls.timedOut || ls.exitCode !== 0) {
-      fail("mount", `listing ${config.guestRoot} in the sandbox failed (${ls.timedOut ? "timed out" : `exit code ${ls.exitCode ?? "unknown"}`}); is the host root mounted at the guest root?`);
-    } else {
-      const guest = ls.output.split("\n").map((l) => l.replace(/\r$/, "")).filter((l) => l !== "");
-      const host = await deps.readdir(config.hostRoot);
-      if (host.length === 0) {
-        ok("mount", `host root is empty, so the mount cannot be verified; add a file and rerun for a real check`);
+  for (const m of config.mounts) {
+    try {
+      const ls = await deps.backend.run(`ls -A1 -- ${shQuote(m.guest)}`, { timeoutMs: CHECK_TIMEOUT_MS });
+      if (ls.timedOut || ls.exitCode !== 0) {
+        fail("mount", `listing ${m.guest} in the sandbox failed (${ls.timedOut ? "timed out" : `exit code ${ls.exitCode ?? "unknown"}`}); is ${m.host} mounted at ${m.guest}?`);
       } else {
-        const missingInGuest = diff(host, guest, fold);
-        const missingOnHost = diff(guest, host, fold);
-        if (missingInGuest.length === 0 && missingOnHost.length === 0) {
-          ok("mount", `${config.hostRoot} matches ${config.guestRoot} (${host.length} entries)`);
+        const guest = ls.output.split("\n").map((l) => l.replace(/\r$/, "")).filter((l) => l !== "");
+        const host = await deps.readdir(m.host);
+        if (host.length === 0) {
+          ok("mount", `${m.host} is empty, so the mount cannot be verified; add a file and rerun for a real check`);
         } else {
-          const parts: string[] = [];
-          if (missingInGuest.length) parts.push(`missing in sandbox: ${names(missingInGuest)}`);
-          if (missingOnHost.length) parts.push(`missing on host: ${names(missingOnHost)}`);
-          fail("mount", `${parts.join("; ")}; check the mount of ${config.hostRoot} at ${config.guestRoot} (a file created between the two reads can cause this, so rerun)`);
+          const missingInGuest = diff(host, guest, fold);
+          const missingOnHost = diff(guest, host, fold);
+          if (missingInGuest.length === 0 && missingOnHost.length === 0) {
+            ok("mount", `${m.host} matches ${m.guest} (${host.length} entries)`);
+          } else {
+            const parts: string[] = [];
+            if (missingInGuest.length) parts.push(`missing in sandbox: ${names(missingInGuest)}`);
+            if (missingOnHost.length) parts.push(`missing on host: ${names(missingOnHost)}`);
+            fail("mount", `${parts.join("; ")}; check the mount of ${m.host} at ${m.guest} (a file created between the two reads can cause this, so rerun)`);
+          }
         }
       }
+    } catch (e) {
+      const err = e instanceof BackendError ? e : undefined;
+      fail("mount", err ? backendErrorText(err, config.sandbox, create) : msg(e));
     }
-  } catch (e) {
-    const err = e instanceof BackendError ? e : undefined;
-    fail("mount", err ? backendErrorText(err, config.sandbox) : msg(e));
   }
   return failed ? 1 : 0;
 }

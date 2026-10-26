@@ -6,7 +6,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { runCheck } from "./check.js";
-import { ConfigError, parseCli } from "./config.js";
+import { runPrepare } from "./prepare.js";
+import type { Provisioner, ProvisionSdk } from "./backend/provision.js";
+import { type Config, ConfigError, parseCli } from "./config.js";
 import { checkRuntime, runtimeLogLine } from "./runtime.js";
 import { ShellService } from "./service.js";
 import { createServer } from "./tools.js";
@@ -30,6 +32,15 @@ function versions(): { self: string; sdk: string } {
   return { self, sdk };
 }
 
+/** Create mode only. Importing the provisioner does not load the native module; `loadSdk` does, lazily. */
+async function makeProvisioner(cfg: Config): Promise<Provisioner> {
+  const { Provisioner } = await import("./backend/provision.js");
+  return new Provisioner(cfg.sandbox, cfg.machine!, cfg.mounts, { recreate: cfg.recreate }, {
+    loadSdk: () => import("microsandbox") as unknown as Promise<ProvisionSdk>,
+    platform: cfg.platform,
+  });
+}
+
 async function main(): Promise<void> {
   let cli;
   try {
@@ -50,6 +61,14 @@ async function main(): Promise<void> {
     process.stdout.write(`shell-mcp ${v.self} (microsandbox SDK ${v.sdk})\n`);
     return;
   }
+  if (cli.mode === "prepare") {
+    const cfg = cli.config;
+    const provisioner = await makeProvisioner(cfg);
+    const code = await runPrepare(provisioner, (line) => process.stdout.write(`${line}\n`), cfg.sandbox);
+    process.exitCode = code;
+    process.stdout.write("", () => process.exit(code));
+    return;
+  }
   if (cli.mode === "check") {
     const cfg = cli.config;
     // Importing the backend module does not load the native module; the check's native step does.
@@ -61,6 +80,7 @@ async function main(): Promise<void> {
         backend: new MicrosandboxBackend(cfg.sandbox, cfg.shell, cfg.maxOutput),
         runtime: () => checkRuntime(v.sdk),
         readdir: (p) => readdir(p),
+        ...(cfg.machine ? { inspect: () => makeProvisioner(cfg).then((p) => p.inspect()) } : {}),
       },
       (line) => process.stdout.write(`${line}\n`),
     );
@@ -70,13 +90,27 @@ async function main(): Promise<void> {
     return;
   }
   const cfg = cli.config;
-  log(`version ${v.self}, microsandbox SDK ${v.sdk}, sandbox "${cfg.sandbox}"`);
+  log(
+    cfg.machine
+      ? `version ${v.self}, microsandbox SDK ${v.sdk}, create mode, sandbox "${cfg.sandbox}", image ${cfg.machine.image}`
+      : `version ${v.self}, microsandbox SDK ${v.sdk}, attach mode, sandbox "${cfg.sandbox}"`,
+  );
   // Loaded only when serving, so --help and --version never touch the native module.
   const { MicrosandboxBackend } = await import("./backend/microsandbox.js");
-  const backend = new MicrosandboxBackend(cfg.sandbox, cfg.shell, cfg.maxOutput);
+  let provisioner: Provisioner | undefined;
+  if (cfg.machine) {
+    provisioner = await makeProvisioner(cfg);
+  }
+  // Every attempt, background or per call, logs its stages to stderr.
+  const backend = new MicrosandboxBackend(
+    cfg.sandbox, cfg.shell, cfg.maxOutput,
+    provisioner ? { provisioner: { ensure: () => provisioner.ensure((stage) => log(stage)), progress: () => provisioner.progress() } } : {},
+  );
   const service = new ShellService(cfg, backend);
   const server = createServer(cfg, service, v.self);
   await server.connect(new StdioServerTransport());
+  // Create mode: provision in the background; failures surface on the first tool call.
+  if (provisioner) backend.warm();
   // Advisory only and not awaited: a slow or failing check must never delay or stop serving.
   void checkRuntime(v.sdk).then(
     (r) => log(runtimeLogLine(r)),

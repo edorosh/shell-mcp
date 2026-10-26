@@ -37,3 +37,7 @@ also runs `pgrep` inside the guest, which is the one that counts. In the guest o
 4. Any check that printed `UNCAUGHT`.
 
 The results are then recorded in `docs/superpowers/specs/spike-results.md`.
+
+## v3 create-API spike
+
+`v3-create.mjs` probes the SDK create path (builder, `config()`, network policy, stop and start of a detached sandbox). It creates and removes its own sandboxes, so use throwaway names. Run it from a shell-mcp clone after `npm ci`, as `node spike/v3-create.mjs <create|config|build|net|stop|start|remove> <name> [hostDir]`. `create` exits without stopping the sandbox on purpose. The steps for the maintainer are kept outside the repo.

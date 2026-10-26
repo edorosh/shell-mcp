@@ -1,6 +1,6 @@
 # shell-mcp — Product Specification
 
-Status: current through release 1.1.0 (v1, v2 and v2.1) · Date: 2026-10-25 ·
+Status: current through release 1.2.0 (v1, v2, v2.1 and v3) · Date: 2026-10-26 ·
 v2 amendments 2026-10-25 · v2.1 (macOS) 2026-10-26 · updated 2026-10-26
 
 ## 1. Conventions
@@ -54,7 +54,9 @@ Motivations:
 - G1. A shell tool whose use cases match the client's built-in shell tool:
   foreground commands with timeouts, and background commands with output
   polling and termination.
-- G2. Commands execute in an existing, user-provided sandbox.
+- G2. Commands execute in a microsandbox sandbox: an existing, user-provided
+  one (attach mode), or one the instance creates from its configuration
+  (create mode, C13). (Amended v3.)
 - G3. The host/sandbox path difference is handled so the agent can move
   between file tools (host paths) and shell commands (sandbox paths) without
   confusion.
@@ -65,8 +67,9 @@ Motivations:
 
 ### 4.2 Non-goals (v1)
 
-- N1. Creating, starting, stopping, or deleting sandboxes. The user manages
-  sandbox lifecycle.
+- N1. In attach mode (no `--image`), creating, starting, stopping, or deleting
+  sandboxes. The user manages sandbox lifecycle. (Amended v3: create mode,
+  C13, creates and starts its sandbox; the instance still never stops one.)
 - N2. More than one sandbox per instance, or switching sandboxes at runtime.
 - N3. Interactive programs requiring a terminal (editors, password prompts,
   REPLs driven by keystrokes).
@@ -139,6 +142,23 @@ These outcomes make the product a failure even if it otherwise works:
   read-only and MUST NOT write files on either side.
 - C12. The MCP `initialize` response (`serverInfo.version`) MUST report the
   instance's released version. (Added 2026-10-26, 1.0.2.)
+- C13. Create mode (added v3, 1.2.0). When `--image` is given the instance
+  creates and starts the sandbox named by `sandbox` itself:
+  - The machine is defined by flags: `--image`, repeatable
+    `--mount HOST:GUEST[:ro]` (at least one; the first is the project mount),
+    `--allow-domain`, `--allow-network`, `--cpus` and `--memory`.
+    `host-root` and `guest-root` are not accepted; path translation (§8)
+    follows the mounts.
+  - The sandbox is persistent: created on first start, reused by name later,
+    and MUST NOT be stopped when the instance exits.
+  - If an existing sandbox differs from the flags, the instance MUST refuse and
+    list the differences. Only `--recreate` removes and recreates it, deleting
+    everything in the sandbox outside the mounts.
+  - The instance answers the MCP handshake at once and provisions in the
+    background; a tool call made too early reports that the sandbox is still
+    being prepared (§10). `--prepare` provisions in the foreground and exits.
+    `--check` stays read-only (C11) and MUST NOT create, start or recreate.
+  Without `--image` the instance is in attach mode and behaves as in v1/v2.
 
 ## 6. Backend
 
@@ -148,10 +168,12 @@ These outcomes make the product a failure even if it otherwise works:
   background command, read its output incrementally, query its status,
   terminate it, and list the background commands it started.
 - B3. The implementation MUST connect to an already-existing sandbox. It MUST
-  NOT create, start, stop, restart, or delete sandboxes.
+  NOT create, start, stop, restart, or delete sandboxes. (Amended v3: attach
+  mode only; in create mode see C13.)
 - B4. When the sandbox is stopped or missing, the implementation MUST fail
   the tool call (§10) rather than start or create it. The error message
-  SHOULD tell the user how to start the sandbox.
+  SHOULD tell the user how to start the sandbox. (Amended v3: attach mode
+  only; in create mode the instance creates or starts the sandbox, C13.)
 - B5. Where the backend has a separately installed runtime whose version
   must match its SDK (microsandbox: `msb`), the implementation MUST pin the
   SDK to an exact version, and after connecting to the client SHOULD log to
@@ -354,15 +376,23 @@ server bridges the two deterministically.
   to talk to the backend.
 - X3. The instance MUST NOT log command output or environment contents
   beyond what is needed for diagnostics. Logs go to stderr only.
-- X4. The sandbox's isolation (network policy, mounts, secrets) is the
-  backend's and the user's responsibility. The instance MUST NOT widen it.
+- X4. In attach mode the sandbox's isolation (network policy, mounts, secrets)
+  is the backend's and the user's responsibility; the instance MUST NOT widen
+  it. In create mode the instance sets the mounts and the network policy
+  exactly from the flags and MUST NOT widen them: the network is denied unless
+  `--allow-domain` or `--allow-network` says otherwise, and no rule allows
+  private, LAN, loopback or host ranges. Whether an allowed domain that
+  resolves to a private address is reachable depends on the runtime and is
+  checked in the v3 spike. (Amended v3.)
 
 ## 12. Client integration
 
 The project MUST ship user documentation covering:
 
 - I1. Creating a suitable sandbox with the project folder mounted, with a
-  concrete microsandbox example.
+  concrete microsandbox example, for both modes: create mode (`--image` and
+  `--mount`, `--prepare`, stopping and removing the persistent sandbox) and
+  attach mode (a sandbox the user created). (Amended v3.)
 - I2. Registering the server in Claude Code (`.mcp.json`) and GitHub Copilot
   (`.vscode/mcp.json`) on Windows, running the published package at an exact
   version (`npx -y @edorosh/shell-mcp@<version>`). (Amended 2026-10-25, v2.)

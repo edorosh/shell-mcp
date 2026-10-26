@@ -8,10 +8,18 @@ import { extractCwd, newNonce, wrapBackground, wrapForeground } from "./wrap.js"
 export interface ToolResult { text: string; isError: boolean }
 export interface CallContext { signal?: AbortSignal; onProgress?: (elapsedSec: number) => void }
 
-const isSandboxState = (k: BackendError["kind"]) => k === "not_found" || k === "not_running" || k === "unreachable";
+// preparing and config_mismatch mean the command was not started; their text is the message itself.
+const isSandboxState = (k: BackendError["kind"]) =>
+  k === "not_found" || k === "not_running" || k === "unreachable" || k === "preparing" || k === "config_mismatch";
 
 /** Wording for a backend failure, shared by the tools and `--check`. Other kinds keep their own message. */
-export function backendErrorText(err: BackendError, sandbox: string): string {
+export function backendErrorText(err: BackendError, sandbox: string, create = false): string {
+  if (create) {
+    // Create mode starts the sandbox itself on the next call: never point at msb.
+    if (err.kind === "not_found") return `sandbox "${sandbox}" does not exist any more; the next call creates it again.`;
+    if (err.kind === "not_running") return `sandbox "${sandbox}" is not running; the next call starts it again.`;
+    if (err.kind === "unreachable") return `sandbox "${sandbox}" is unreachable: ${err.message}. The next call retries.`;
+  }
   switch (err.kind) {
     case "not_found":
       return `sandbox "${sandbox}" not found. Create it with msb create … --name ${sandbox}.`;
@@ -36,11 +44,11 @@ export class ShellService {
     protected readonly backend: Backend,
     deps: { nonce?: string; progressIntervalMs?: number; now?: () => Date } = {},
   ) {
-    this.paths = new PathMapper(cfg.hostRoot, cfg.guestRoot, cfg.platform);
+    this.paths = new PathMapper(cfg.mounts, cfg.platform);
     this.nonce = deps.nonce ?? newNonce();
     this.progressIntervalMs = deps.progressIntervalMs ?? 15_000;
     this.jobs = new JobRegistry(deps.now);
-    this.guestCwd = cfg.guestRoot;
+    this.guestCwd = cfg.mounts[0].guest;
   }
 
   get cwd(): string {
@@ -62,7 +70,7 @@ export class ShellService {
     }
 
     const startCwd = this.guestCwd;
-    const script = wrapForeground(args.command, startCwd, this.cfg.guestRoot, this.nonce);
+    const script = wrapForeground(args.command, startCwd, this.cfg.mounts[0].guest, this.nonce);
     const started = Date.now();
     let timer: ReturnType<typeof setInterval> | undefined;
     if (ctx.onProgress) {
@@ -92,7 +100,7 @@ export class ShellService {
   }
 
   private async startBackground(command: string): Promise<ToolResult> {
-    const script = wrapBackground(command, this.guestCwd, this.cfg.guestRoot);
+    const script = wrapBackground(command, this.guestCwd, this.cfg.mounts[0].guest);
     try {
       const { id } = await this.backend.startJob(script);
       this.jobs.add(id, shortenCommand(command));
@@ -216,7 +224,7 @@ export class ShellService {
   protected errorResult(e: unknown, tool: "shell" | "shell_output" | "shell_kill" | "shell_list" = "shell"): ToolResult {
     const name = this.cfg.sandbox;
     const err = e instanceof BackendError ? e : new BackendError("outcome_unknown", e instanceof Error ? e.message : String(e));
-    const sandboxState = isSandboxState(err.kind) ? backendErrorText(err, name) : undefined;
+    const sandboxState = isSandboxState(err.kind) ? backendErrorText(err, name, this.cfg.machine !== undefined) : undefined;
     let text: string;
     if (tool === "shell") {
       if (sandboxState) text = `Command was not started: ${sandboxState}`;
