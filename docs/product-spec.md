@@ -1,7 +1,7 @@
 # shell-mcp — Product Specification
 
-Status: current through release 1.0.2 (v1 and v2) · Date: 2026-10-25 ·
-v2 amendments 2026-10-25 · updated 2026-10-26
+Status: current through release 1.1.0 (v1, v2 and v2.1) · Date: 2026-10-25 ·
+v2 amendments 2026-10-25 · v2.1 (macOS) 2026-10-26 · updated 2026-10-26
 
 ## 1. Conventions
 
@@ -37,7 +37,7 @@ Motivations:
 
 | Term | Meaning |
 |------|---------|
-| Host | The machine running the agent and the shell-mcp server. v1: Windows. |
+| Host | The machine running the agent and the shell-mcp server. Windows, or macOS on Apple Silicon (v2.1). |
 | Sandbox | An isolated Linux environment in which commands run. |
 | Backend | The sandboxing technology providing the sandbox (v1: microsandbox). |
 | Client | The MCP host application (Claude Code, GitHub Copilot in VS Code). |
@@ -58,7 +58,7 @@ Motivations:
 - G3. The host/sandbox path difference is handled so the agent can move
   between file tools (host paths) and shell commands (sandbox paths) without
   confusion.
-- G4. Works with Claude Code and GitHub Copilot on Windows hosts.
+- G4. Works with Claude Code and GitHub Copilot on Windows and macOS (Apple Silicon) hosts.
 - G5. The server runs on the host, never inside the sandbox, so that it
   survives sandbox pause, stop, or compromise and can always report the
   sandbox's state to the agent.
@@ -71,9 +71,10 @@ Motivations:
 - N3. Interactive programs requiring a terminal (editors, password prompts,
   REPLs driven by keystrokes).
 - N4. File read/write tools. Those stay with the client's built-in tools.
-- N6. Linux and macOS hosts. Deferred to a later version. Nothing in v1
+- N6. Linux hosts. Deferred to a later version. Nothing in v1
   may assume a Windows host beyond the host-path rules of §8, so that
-  adding them later is a matter of path handling and testing.
+  adding them later is a matter of path handling and testing. (Amended v2.1:
+  macOS supported.)
 - N5. Backends other than microsandbox (e.g. Docker sbx). The design MUST
   NOT preclude adding them later (see §6).
 
@@ -418,7 +419,7 @@ Added 2026-10-25, v2.
 
 ## 13. Acceptance criteria
 
-A conforming implementation passes all of these on a Windows host (1 to 12
+A conforming implementation passes all of these on a Windows or Apple Silicon macOS host (1 to 12
 from v1, 13 to 17 from v2 and later):
 
 1. `shell` with `echo hi` returns `hi` and exit code 0.

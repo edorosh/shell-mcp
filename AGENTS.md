@@ -6,7 +6,7 @@ Guidance for coding agents working on this repository. Humans: see
 ## What this is
 
 `@edorosh/shell-mcp`: an MCP server (stdio, TypeScript, Node 22+) that runs on a
-Windows host and executes shell commands inside an existing microsandbox
+Windows or macOS (Apple Silicon) host and executes shell commands inside an existing microsandbox
 sandbox. The requirements are in [docs/product-spec.md](docs/product-spec.md);
 requirement IDs (C4, S5, P4, ...) are cited in code and tests.
 
@@ -20,9 +20,9 @@ npm run build
 npm run check:pack  # what the published tarball contains and that the bin starts
 ```
 
-CI runs typecheck, build and tests on Ubuntu and Windows, plus the pack check on
-Windows. `test/integration.test.ts` needs a real sandbox on a Windows host
-(`SHELL_MCP_IT_*` variables) and is skipped otherwise; you cannot run it from a
+CI runs typecheck, build and tests on Ubuntu, Windows and macOS, plus the pack
+check on Windows and macOS. `test/integration.test.ts` needs a real sandbox on a
+Windows host or an Apple Silicon Mac (`SHELL_MCP_IT_*` variables) and is skipped otherwise; you cannot run it from a
 Linux container.
 
 ## Layout
@@ -32,7 +32,8 @@ Linux container.
   `src/check.ts` the `--check` steps; `src/runtime.ts` the `msb` version check.
 - `src/tools.ts`, `src/descriptions.ts`: MCP tools and their descriptions.
 - `src/service.ts`, `src/jobs.ts`, `src/wrap.ts`, `src/output.ts`, `src/paths.ts`:
-  command execution, background jobs, cwd tracking, output limits, path mapping.
+  command execution, background jobs, cwd tracking, output limits, path
+  mapping.
 - `src/backend/`: the backend interface and the microsandbox implementation. Keep
   SDK-specific code there.
 - `docs/superpowers/`: design specs, plans and spike results per milestone.
@@ -50,7 +51,8 @@ Linux container.
 - Docs: keep `README.md` minimal (what it is, quick start, contributing). Put
   setup detail, configuration, troubleshooting and known issues in the matching
   `docs/` page. When a feature ships, update `docs/product-spec.md`, the
-  `[Unreleased]` section of `CHANGELOG.md`, and `ROADMAP.md` if a milestone moves.
+  `[Unreleased]` section of `CHANGELOG.md`, and `ROADMAP.md` if a milestone
+  moves.
 - Flags change in three places: `src/config.ts`, `src/usage.ts` and the table in
   `docs/configuration.md`.
 - In docs and examples, use the `C:\Users\<you>\...` placeholder, never a real

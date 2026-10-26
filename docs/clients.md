@@ -2,8 +2,9 @@
 
 Each client gets two things: the shell-mcp server entry, and its built-in shell
 turned off so the agent can only run commands through shell-mcp. The examples
-use sandbox `myproj`, host folder `C:\Users\<you>\dev\myproj` and guest path
-`/workspace` (see [Sandbox and runtime](sandbox.md)).
+use sandbox `myproj`, host folder `C:\Users\<you>\dev\myproj` (on a Mac,
+`/Users/<you>/dev/myproj`) and guest path `/workspace` (see
+[Sandbox and runtime](sandbox.md)).
 
 ## Claude Code
 
@@ -15,7 +16,7 @@ Put `.mcp.json` in your project (example: [examples/claude/.mcp.json](../example
     "sandbox": {
       "command": "cmd",
       "args": [
-        "/c", "npx", "-y", "@edorosh/shell-mcp@1.0.2",
+        "/c", "npx", "-y", "@edorosh/shell-mcp@1.1.0",
         "--sandbox", "myproj",
         "--host-root", "C:\\Users\\<you>\\dev\\myproj",
         "--guest-root", "/workspace"
@@ -25,10 +26,30 @@ Put `.mcp.json` in your project (example: [examples/claude/.mcp.json](../example
 }
 ```
 
-Or add it from the command line:
+On macOS, use `npx` directly, with the host folder as a literal path. If
+`~/dev` is a symlink, give the `pwd -P` path instead (see
+[Sandbox and runtime](sandbox.md#macos)):
+
+```json
+{
+  "mcpServers": {
+    "sandbox": {
+      "command": "npx",
+      "args": [
+        "-y", "@edorosh/shell-mcp@1.1.0",
+        "--sandbox", "myproj",
+        "--host-root", "/Users/<you>/dev/myproj",
+        "--guest-root", "/workspace"
+      ]
+    }
+  }
+}
+```
+
+Or add it from the command line on Windows:
 
 ```powershell
-claude mcp add sandbox --scope project -- cmd /c npx -y @edorosh/shell-mcp@1.0.2 --sandbox myproj --host-root C:\Users\<you>\dev\myproj --guest-root /workspace
+claude mcp add sandbox --scope project -- cmd /c npx -y @edorosh/shell-mcp@1.1.0 --sandbox myproj --host-root C:\Users\<you>\dev\myproj --guest-root /workspace
 ```
 
 `cmd /c` is what the Claude Code docs prescribe for `npx` on native Windows.
@@ -55,7 +76,7 @@ Put `.vscode/mcp.json` in your project (example:
       "type": "stdio",
       "command": "npx",
       "args": [
-        "-y", "@edorosh/shell-mcp@1.0.2",
+        "-y", "@edorosh/shell-mcp@1.1.0",
         "--sandbox", "myproj",
         "--host-root", "C:\\Users\\<you>\\dev\\myproj",
         "--guest-root", "/workspace"
@@ -65,15 +86,19 @@ Put `.vscode/mcp.json` in your project (example:
 }
 ```
 
+On macOS the same file uses the host root `"/Users/<you>/dev/myproj"` (the
+`pwd -P` path if `~/dev` is a symlink); the rest is unchanged.
+
 Use a literal host path: VS Code does not substitute `${workspaceFolder}` in
 `args` (shell-mcp would get the literal string and exit with "host-root must be
 an absolute path").
 
 ### Turning off Copilot's built-in shell
 
-What works depends on where Copilot runs. As of 2026-10-25 the Copilot harness
-hook below is verified with shell-mcp on Windows; its Linux/macOS script, the
-Local harness and the Copilot CLI options are untested.
+What works depends on where Copilot runs. As of 2026-10-26 the Copilot harness
+hook below is verified with shell-mcp on Windows (`deny-shell.ps1`) and macOS
+(`deny-shell.sh`); the script is still untested on Linux, and so are the Local
+harness and the Copilot CLI options.
 
 **VS Code, Copilot harness (Agent Host):** the harness's built-in tools are
 read-only in the Agent Customizations **Tools** tab, so the shell cannot be
@@ -97,8 +122,10 @@ carries `toolName` and `toolArgs`; to debug, add
 `Add-Content "$env:TEMP\copilot-hook.log" $raw` after the first line of the
 script and read the log (in `deny-shell.sh`, add
 `printf '%s\n' "$raw" >> /tmp/copilot-hook.log` after the `raw=` line).
-The Linux/macOS script is untested with Copilot; it was only checked against
-sample payloads from the command line.
+`deny-shell.sh` was verified on macOS on 2026-10-26 in a Copilot harness
+session: the built-in `bash` tool was denied (hook exit 2), and the agent then
+ran a command through `sandbox-shell` and got Linux. It is still untested on
+Linux; there it was only checked against sample payloads from the command line.
 
 **VS Code, Local harness (untested):** in Agent mode, select **Configure Tools**
 in the chat input and deselect the built-in terminal tools (the `execute`
@@ -126,7 +153,7 @@ References: [VS Code: use tools with agents](https://code.visualstudio.com/docs/
 ## Copilot CLI (untested)
 
 Add the server with `/mcp add`, using the same command and arguments as the
-VS Code example (`npx` with `-y @edorosh/shell-mcp@1.0.2 --sandbox ...`) and
+VS Code example (`npx` with `-y @edorosh/shell-mcp@1.1.0 --sandbox ...`) and
 the name `/mcp` shows. The CLI does not read `.vscode/mcp.json`. To deny the
 built-in shell and allow shell-mcp per session (deny rules win over every allow
 rule, including `--allow-all-tools`):

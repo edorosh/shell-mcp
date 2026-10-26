@@ -21,7 +21,8 @@ runs the local copy.
 
 ## Integration suite
 
-In PowerShell, with a running sandbox:
+The suite runs on Windows or on an Apple Silicon Mac, with a running sandbox.
+In PowerShell:
 
 ```powershell
 $env:SHELL_MCP_IT_SANDBOX="myproj"; $env:SHELL_MCP_IT_HOST_ROOT="C:\Users\<you>\dev\myproj"; $env:SHELL_MCP_IT_GUEST_ROOT="/workspace"; npx vitest run test/integration.test.ts
@@ -29,6 +30,17 @@ $env:SHELL_MCP_IT_SANDBOX="myproj"; $env:SHELL_MCP_IT_HOST_ROOT="C:\Users\<you>\
 
 Expected: 12 pass, or 11 pass and 1 skipped. The skipped one stops the sandbox;
 set `SHELL_MCP_IT_ALLOW_STOP=1` to run it.
+
+On macOS, first put the SDK's bundled `msb` on `PATH`, from the repo root, and
+use the resolved (`pwd -P`) project path:
+
+```zsh
+export PATH="$PWD/node_modules/@superradcompany/microsandbox-darwin-arm64/bin:$PATH"
+SHELL_MCP_IT_SANDBOX=myproj SHELL_MCP_IT_HOST_ROOT="$(cd ~/dev/myproj && pwd -P)" SHELL_MCP_IT_GUEST_ROOT=/workspace npx vitest run test/integration.test.ts
+```
+
+CI runs typecheck, build and tests on Ubuntu, Windows and macOS, and the pack
+check on Windows and macOS.
 
 ## SDK spike
 

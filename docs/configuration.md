@@ -46,17 +46,19 @@ It is read-only and writes nothing on either side.
 ## npx or global install
 
 The client configs in the [README](../README.md) run
-`npx -y @edorosh/shell-mcp@1.0.2 ...`. That form contacts the npm registry on
+`npx -y @edorosh/shell-mcp@1.1.0 ...`. That form contacts the npm registry on
 every start, so it does not start offline. **Do not use `npx shell-mcp`**: the
 unscoped npm name belongs to an unrelated package.
 
 To start offline and instantly, install globally:
 
 ```powershell
-npm i -g @edorosh/shell-mcp@1.0.2
+npm i -g @edorosh/shell-mcp@1.1.0
 ```
 
 Then use `shell-mcp` as the command, with the same arguments and without
-`npx -y @edorosh/shell-mcp@1.0.2`: in `.vscode/mcp.json`
+`npx -y @edorosh/shell-mcp@1.1.0`: in `.vscode/mcp.json`
 `"command": "shell-mcp"`, and in Claude Code's `.mcp.json`
-`"command": "cmd", "args": ["/c", "shell-mcp", "--sandbox", ...]`.
+`"command": "cmd", "args": ["/c", "shell-mcp", "--sandbox", ...]`. On macOS use
+`"command": "shell-mcp", "args": ["--sandbox", ...]` (untested on macOS: the
+spike did not exercise a global install there).

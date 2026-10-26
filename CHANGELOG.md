@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-26
+
+### Added
+
+- macOS hosts on Apple Silicon. On an Intel Mac or an x64 Node under Rosetta,
+  `--check` and the startup log say that macOS needs Apple Silicon and an arm64 Node.
+- CI runs the tests and the pack check on macOS.
+
+microsandbox SDK 0.7.11, tested with msb 0.7.11 on Windows and macOS (Apple
+Silicon).
+
 ## [1.0.2] - 2026-10-26
 
 ### Fixed

@@ -19,6 +19,37 @@ npm config delete os
 Then re-run the `--check` command. If the Linux package is already cached,
 clear the npx cache (see the next entry) before retrying.
 
+## `msb create` says the mount goes through a symlink
+
+On a Mac, `msb create` fails with `invalid config: bind mount host path ...
+goes through symlink ...; use the resolved path ...` when part of the folder
+path is a symlink (for example `~/dev` pointing at another volume). Mount the
+resolved path instead, which `pwd -P` prints:
+
+```zsh
+npx -y -p microsandbox@0.7.11 msb create ubuntu:24.04 --name myproj --mount-dir "$(cd ~/dev/myproj && pwd -P):/workspace"
+```
+
+For `--host-root` either the symlinked or the resolved path works; the
+resolved path is simplest because it matches the mount. See [Sandbox and runtime](sandbox.md#macos).
+
+## `--check` says macOS needs Apple Silicon
+
+The full message is `macOS needs Apple Silicon and an arm64 Node (this Node is
+x64: an Intel Mac, or Node running under Rosetta)`. Check which Node runs:
+
+```zsh
+node -p process.arch
+```
+
+`x64` on an Apple Silicon Mac means an x64 build of Node, for example one
+installed from a Terminal running under Rosetta, or carried over from an Intel
+Mac. Install an arm64 Node (for
+example from nodejs.org or a version manager run natively) and make sure the
+client starts that one. On an Intel Mac shell-mcp does not run. On other
+platforms the same check reports `reinstall shell-mcp without --omit=optional
+on this OS and CPU` instead.
+
 ## Access denied when clearing the npx cache or upgrading
 
 Deleting `%LOCALAPPDATA%\npm-cache\_npx`, or an upgrade that replaces it, fails with
