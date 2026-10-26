@@ -120,6 +120,13 @@ shares one definition and richer settings fit without long flag lists.
 - A project `shell-mcp.json` passed with `--config`, holding what v3's flags
   hold (image, mounts, network rules, resources) plus room for more structure,
   such as environment variables and finer network rules.
+- Secrets: pass a host environment variable into the sandbox as a placeholder
+  that microsandbox swaps for the real value only on requests to allowed
+  hosts, so the guest never sees the token. Each secret names its env var,
+  allowed hosts and, optionally, its own placeholder. A custom placeholder is
+  needed for tools that check the token's format (Copilot rejects the default
+  `$MSB_<VAR>`). Only the SDK can set it (`SecretBuilder.placeholder()`); the
+  `msb` CLI and its YAML config cannot, so create mode is the way to get it.
 - v3 flags keep working.
 
 Done when: one MCP entry with `--config` gives the same sandbox as the
